@@ -357,6 +357,11 @@ def main():
 
     print(f"共找到 {len(files)} 个报告文件，开始分析...")
 
+    if not files:
+        print("\n未找到任何 .xlsx / .xls 报告文件，请将报告文件放入扫描目录后重试。")
+        print(f"扫描目录：{REPORT_DIR}")
+        return
+
     # ── Collect all file info ──
     all_info = {}  # fname -> info dict
     for i, fname in enumerate(files):
