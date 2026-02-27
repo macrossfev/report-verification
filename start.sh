@@ -26,9 +26,16 @@ source venv/bin/activate
 pip install -q -r requirements.txt
 
 echo ""
+echo "用法: ./start.sh [目录路径] [选项]"
+echo "  ./start.sh                        扫描脚本所在目录"
+echo "  ./start.sh /path/to/reports        扫描指定目录"
+echo "  ./start.sh -r /path/to/reports     同上"
+echo "  ./start.sh -o output.txt           自定义输出文件"
+echo "  ./start.sh -h                      查看完整帮助"
+echo ""
 echo "开始分析报告文件..."
 echo "================================================"
 echo ""
 
-# 运行分析脚本（可通过参数指定扫描目录）
+# 运行分析脚本
 python3 analyze_reports.py "$@"

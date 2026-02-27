@@ -5,15 +5,13 @@
 扫描所有 .xlsx / .xls 报告，按类别输出待确认问题清单。
 """
 
+import argparse
 import os, re, sys, traceback
 from collections import defaultdict, Counter
 from datetime import datetime
 
 import openpyxl
 import xlrd
-
-REPORT_DIR = os.path.dirname(os.path.abspath(__file__))
-OUTPUT_FILE = os.path.join(REPORT_DIR, "待确认问题清单.txt")
 
 # ──────────────────────────── helpers ────────────────────────────
 
@@ -197,7 +195,7 @@ def read_xlsx_report_info(filepath):
                                 'seq': seq,
                                 'name': str(b_val).strip(),
                                 'unit': str(ws.cell(r, 3).value or '').strip(),
-                                'result': str(d_val).strip() if d_val is not None else '',
+                                'result': format_cell_number(d_val, ws.cell(r, 4).number_format) if d_val is not None else '',
                                 'standard': str(ws.cell(r, 5).value or '').strip(),
                                 'method': str(ws.cell(r, 6).value or '').strip(),
                             }
@@ -349,23 +347,896 @@ def read_xls_report_info(filepath):
     return info
 
 
+# ──────────────── Original Record Handling ────────────────
+
+def find_original_record_file(directory):
+    """Find original record file (e.g., 260205-1-25.xlsx) in directory."""
+    for f in sorted(os.listdir(directory)):
+        if re.match(r'^\d{6}-\d+-\d+\.xlsx$', f):
+            return os.path.join(directory, f)
+    return None
+
+
+def clean_item_name(raw):
+    """Clean test item name for matching."""
+    s = str(raw).strip()
+    s = re.sub(r'\s*\n\s*', '', s)
+    # Remove trailing punctuation
+    s = re.sub(r'[、，,]+$', '', s).strip()
+    # Remove unit suffixes like (mg/L)
+    s = re.sub(r'\s*[\(（][^)）]*[\)）]\s*$', '', s).strip()
+    s = re.sub(r'\s*[\(（][^)）]*$', '', s).strip()
+    # Remove spaces between CJK characters (e.g., 氰 化 物 -> 氰化物)
+    s = re.sub(r'(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])', '', s)
+    s = re.sub(r'\s{2,}', ' ', s).strip()
+    return s
+
+
+def format_cell_number(value, number_format=None):
+    """Format numeric cell preserving Excel decimal places (e.g., 0.30 stays 0.30)."""
+    if value is None:
+        return ''
+    if isinstance(value, str):
+        return value.strip()
+    if not isinstance(value, (int, float)):
+        return str(value).strip()
+    if number_format and number_format not in ('General', '@', '', '0'):
+        if '.' in number_format:
+            after_dot = number_format.split('.')[-1]
+            m = re.match(r'[0#?]+', after_dot)
+            if m:
+                return f"{value:.{len(m.group())}f}"
+    if isinstance(value, float) and value == int(value) and abs(value) < 1e10:
+        return str(int(value))
+    return str(value)
+
+
+def get_param_value(items, *names):
+    """Get numeric value from items dict by fuzzy name matching."""
+    for name in names:
+        for key, val in items.items():
+            if name == key or ((name in key or key in name) and not is_false_substring_match(name, key)):
+                s = str(val).replace('＜', '<').strip()
+                if s.startswith('<'):
+                    return None, key, s
+                try:
+                    return float(s), key, s
+                except (ValueError, TypeError):
+                    pass
+    return None, None, None
+
+
+def check_data_logic(items, label):
+    """Check logical consistency of test data values."""
+    issues = []
+
+    # 1. TDS vs conductivity: ratio should be ~0.4-0.8
+    tds, _, tds_r = get_param_value(items, '溶解性总固体')
+    ec, _, ec_r = get_param_value(items, '电导率')
+    if tds and ec and ec > 0:
+        ratio = tds / ec
+        if ratio < 0.3 or ratio > 1.0:
+            issues.append(f"{label} 溶解性总固体({tds_r})/电导率({ec_r})比值={ratio:.2f}，通常应在0.4-0.8之间")
+
+    # 2. Total Cr >= Cr(VI)
+    cr_t, _, cr_r = get_param_value(items, '总铬')
+    cr6, _, cr6_r = get_param_value(items, '铬(六价)', '六价铬')
+    if cr_t is not None and cr6 is not None and cr6 > cr_t:
+        issues.append(f"{label} 铬(六价)({cr6_r})大于总铬({cr_r})，逻辑矛盾")
+
+    # 3. High Fe/Mn -> color should not be below detection limit
+    fe, _, _ = get_param_value(items, '铁')
+    mn, _, _ = get_param_value(items, '锰')
+    color_raw = None
+    for k, v in items.items():
+        if '色度' in k:
+            color_raw = str(v).strip()
+            break
+    if color_raw and (color_raw.startswith('<') or color_raw.startswith('＜')):
+        high_parts = []
+        if fe and fe > 0.3:
+            high_parts.append(f"铁={fe}")
+        if mn and mn > 0.1:
+            high_parts.append(f"锰={mn}")
+        if high_parts:
+            issues.append(f"{label} {'、'.join(high_parts)}偏高但色度低于检出限({color_raw})，需确认")
+
+    # 4. Total N >= NH3-N + NO3-N + NO2-N
+    tn, _, tn_r = get_param_value(items, '总氮')
+    nh3, _, nh3_r = get_param_value(items, '氨氮', '氨(以N计)', '氨')
+    no3, _, no3_r = get_param_value(items, '硝酸盐')
+    no2, _, no2_r = get_param_value(items, '亚硝酸盐')
+    if tn is not None:
+        comp = sum(v for v in [nh3 or 0, no3 or 0, no2 or 0])
+        if comp > tn * 1.1 and comp > 0:
+            issues.append(
+                f"{label} 氨氮({nh3_r})+硝酸盐氮({no3_r})+亚硝酸盐氮({no2_r})"
+                f"之和({comp:.3f})大于总氮({tn_r})，逻辑矛盾")
+
+    # 5. High DO -> NH3 should be low
+    do, _, do_r = get_param_value(items, '溶解氧')
+    if do and do > 7 and nh3 and nh3 > 0.5:
+        issues.append(f"{label} 溶解氧({do_r})较高但氨氮({nh3_r})偏高，需确认")
+
+    # 6. NO2 usually < NH3 and < NO3
+    if no2 and no2 > 0:
+        if nh3 and nh3 > 0 and no2 > nh3 * 2:
+            issues.append(f"{label} 亚硝酸盐氮({no2_r})显著高于氨氮({nh3_r})，异常")
+        if no3 and no3 > 0 and no2 > no3 * 2:
+            issues.append(f"{label} 亚硝酸盐氮({no2_r})显著高于硝酸盐氮({no3_r})，异常")
+
+    return issues
+
+
+NAME_ALIAS = {
+    '高锰酸盐指数': '高锰酸盐指数(以O2计)',
+    '溶解氧': '溶解氧', '化学需氧量': '化学需氧量(COD)',
+    '五日生化需氧量': '五日生化需氧量(BOD5)',
+    '挥发酚': '挥发酚类(以苯酚计)',
+    '六 价 铬': '铬(六价)', '六价铬': '铬(六价)',
+    '总硬度': '总硬度(以CaCO3计)',
+    '氨': '氨(以N计)', '氨(以N计)': '氨氮(NH3-N)', '硝酸盐': '硝酸盐(以N计)',
+    '总α': '总α放射性', '总a': '总α放射性', '总β': '总β放射性',
+    '总磷': '总磷(以P计)', '总氮': '总氮(以N计)', '氨氮': '氨氮(NH3-N)',
+    '阴离子表面活性剂': '阴离子合成洗涤剂',
+}
+
+# Parameter names that should NOT match each other via substring matching
+# (short_name, long_name_keyword) — if one name IS the short form and the other CONTAINS the long keyword, reject
+CONFUSABLE_PARAMS = [
+    ('锰', '高锰酸盐'),
+]
+
+
+def is_false_substring_match(name_a, name_b):
+    """Return True if name_a and name_b should NOT be considered a substring match."""
+    clean_a = re.sub(r'[\(（].*?[\)）]', '', name_a).strip()
+    clean_b = re.sub(r'[\(（].*?[\)）]', '', name_b).strip()
+    for short, long_kw in CONFUSABLE_PARAMS:
+        if clean_a == short and long_kw in clean_b:
+            return True
+        if clean_b == short and long_kw in clean_a:
+            return True
+    return False
+
+
+def normalize_method(method_str):
+    """Normalize detection method string for comparison (ignore formatting differences)."""
+    s = str(method_str).strip()
+    s = s.replace('\n', ' ').replace('\r', '')
+    s = s.replace('\u3000', ' ')  # full-width space
+    s = re.sub(r'\s+', ' ', s)
+    # Normalize full-width punctuation to half-width
+    s = s.replace('（', '(').replace('）', ')').replace('，', ',')
+    s = s.replace('：', ':').replace('；', ';').replace('、', ',')
+    # Remove spaces between ASCII and CJK characters
+    s = re.sub(r'(?<=[\x21-\x7e])\s+(?=[\u4e00-\u9fff])', '', s)
+    s = re.sub(r'(?<=[\u4e00-\u9fff])\s+(?=[\x21-\x7e])', '', s)
+    return s.strip()
+
+
+def count_significant_figures(value_str):
+    """Count significant figures from string representation of a number.
+
+    The ones-place zero counts as significant (water quality convention):
+    '17.6' -> 3, '7.63' -> 3, '0.64' -> 3, '1.00' -> 3, '0.005' -> 2, '100' -> 3
+    """
+    s = value_str.strip()
+    if s.startswith('-') or s.startswith('+'):
+        s = s[1:]
+    s_no_dot = s.replace('.', '')
+    stripped = s_no_dot.lstrip('0')
+    if not stripped:
+        return 1  # "0" or "0.0" etc.
+    std_sf = len(stripped)
+    # If value is in (0, 1), the ones-place 0 counts as a significant figure
+    if '.' in s:
+        int_part = s.split('.')[0]
+        if int_part.lstrip('0') == '':
+            std_sf += 1
+    return std_sf
+
+
+def read_original_record(filepath):
+    """Read original record: sample registry (Sheet1) + all test data."""
+    wb = openpyxl.load_workbook(filepath, data_only=True)
+    sid_pattern = r'[WKM]\d{6}C\d+'
+
+    # ── Sheet1: Sample Registry ──
+    registry = []
+    ws1 = wb[wb.sheetnames[0]]
+
+    # Auto-detect header: find row with "样品编号" and determine column layout
+    sid_col = None
+    company_col = None
+    desc_col = None
+    samp_code_col = None
+    data_start_row = None
+
+    for r in range(1, min(ws1.max_row + 1, 8)):
+        for c in range(1, ws1.max_column + 1):
+            v = ws1.cell(r, c).value
+            if v and '样品编号' in str(v):
+                sid_col = c
+                data_start_row = r + 1
+            elif v and '被检单位' in str(v):
+                company_col = c
+            elif v and '采样地点' in str(v):
+                desc_col = c
+            elif v and '采样编号' in str(v):
+                samp_code_col = c
+
+    # Fallback defaults
+    if sid_col is None:
+        sid_col = 5
+    if company_col is None:
+        company_col = 2
+    if desc_col is None:
+        desc_col = 3
+    if samp_code_col is None:
+        samp_code_col = 4
+    if data_start_row is None:
+        data_start_row = 4
+
+    for r in range(data_start_row, ws1.max_row + 1):
+        sample_id = ws1.cell(r, sid_col).value
+        if sample_id and re.match(sid_pattern, str(sample_id).strip()):
+            company = ws1.cell(r, company_col).value
+            # 如果当前行无 company，向上查找（合并单元格场景）
+            if not company:
+                for rr in range(r - 1, data_start_row - 1, -1):
+                    cv = ws1.cell(rr, company_col).value
+                    if cv:
+                        company = cv
+                        break
+            registry.append({
+                'seq': ws1.cell(r, 1).value,
+                'company': str(company).strip() if company else '',
+                'description': str(ws1.cell(r, desc_col).value or '').strip(),
+                'sampling_code': str(ws1.cell(r, samp_code_col).value or '').strip(),
+                'sample_id': str(sample_id).strip(),
+            })
+
+    # ── Test Data from remaining sheets ──
+    test_data = defaultdict(dict)
+
+    for si in range(1, len(wb.sheetnames)):
+        ws = wb[wb.sheetnames[si]]
+        if ws.max_row < 3:
+            continue
+
+        # Detect layout: samples in columns (A) or samples in rows (B)
+        sample_cols = {}
+        header_row = 0
+        for hr in [2, 3]:
+            for c in range(1, ws.max_column + 1):
+                v = ws.cell(hr, c).value
+                if v and re.match(sid_pattern, str(v).strip()):
+                    sample_cols[c] = str(v).strip()
+                    header_row = max(header_row, hr)
+
+        if sample_cols:
+            # Layout A: item names in col 1, sample values in columns
+            for r in range(header_row + 1, ws.max_row + 1):
+                item_cell = ws.cell(r, 1).value
+                if not item_cell:
+                    continue
+                cname = clean_item_name(item_cell)
+                if not cname or '项' in cname and '目' in cname:
+                    continue
+                for c, sid in sample_cols.items():
+                    val = ws.cell(r, c).value
+                    if val is not None and str(val).strip():
+                        test_data[sid][cname] = re.sub(r'[、，,]+$', '', str(val).strip())
+        else:
+            # Layout B: sample IDs in col 1, item names in header columns
+            item_cols = {}
+            for hr in [2, 3]:
+                for c in range(2, ws.max_column + 1):
+                    v = ws.cell(hr, c).value
+                    if v:
+                        cname = clean_item_name(v)
+                        if cname and len(cname) > 1:
+                            item_cols[c] = cname
+            if item_cols:
+                for r in range(4, ws.max_row + 1):
+                    v = ws.cell(r, 1).value
+                    if v and re.match(sid_pattern, str(v).strip()):
+                        sid = str(v).strip()
+                        for c, iname in item_cols.items():
+                            val = ws.cell(r, c).value
+                            if val is not None and str(val).strip():
+                                test_data[sid][iname] = re.sub(r'[、，,]+$', '', str(val).strip())
+
+    wb.close()
+    return registry, dict(test_data)
+
+
+def classify_sample_water_type(desc):
+    """Classify water type from sample description."""
+    if '二次供水' in desc:
+        return '二次供水'
+    if '农饮水' in desc or '农村' in desc:
+        return '农饮水'
+    if '管网末梢' in desc:
+        return '管网末梢水'
+    if '管网' in desc:
+        return '管网水'
+    if '出厂水' in desc:
+        return '出厂水'
+    if '原水' in desc:
+        return '原水'
+    return '未知'
+
+
+def extract_plant_from_desc(desc):
+    """Extract plant name from sample description."""
+    s = desc
+    for tag in ['出厂水', '管网末梢水', '管网水', '原水', '农饮水', '二次供水']:
+        s = s.replace(tag, '')
+    s = re.sub(r'[\(（][^)）]*[\)）]', '', s)
+    return s.strip()
+
+
+def find_matching_report_item(test_items, orig_name):
+    """Find matching test item in report by name."""
+    for item in test_items:
+        if item['name'] == orig_name:
+            return item
+    alias = NAME_ALIAS.get(orig_name)
+    if alias:
+        for item in test_items:
+            if item['name'] == alias:
+                return item
+    for item in test_items:
+        if (orig_name in item['name'] or item['name'] in orig_name) and not is_false_substring_match(orig_name, item['name']):
+            return item
+        clean_o = re.sub(r'[\(（].*?[\)）]', '', orig_name).strip()
+        clean_i = re.sub(r'[\(（].*?[\)）]', '', item['name']).strip()
+        if clean_o and clean_i and len(clean_o) > 1 and (clean_o in clean_i or clean_i in clean_o) and not is_false_substring_match(orig_name, item['name']):
+            return item
+    return None
+
+
+def vals_match(orig_val, report_val):
+    """Compare original record value with report value — strict exact match."""
+    if orig_val is None or report_val is None:
+        return True
+    o = re.sub(r'[、，,]+$', '', str(orig_val).strip()).replace('＜', '<')
+    r = re.sub(r'[、，,]+$', '', str(report_val).strip()).replace('＜', '<')
+    if o == r:
+        return True
+    if (o == '0' and r in ('未检出', '0')) or (r == '0' and o in ('未检出', '0')):
+        return True
+    return False
+
+
+def check_original_records(registry, test_data):
+    """Phase 1: Check original records for internal anomalies."""
+    issues = []
+
+    # Group samples by plant
+    plant_samples = defaultdict(dict)
+    for entry in registry:
+        sid = entry['sample_id']
+        if not sid.startswith('W'):
+            continue
+        desc = entry['description']
+        wtype = classify_sample_water_type(desc)
+        plant = extract_plant_from_desc(desc)
+        if plant and wtype != '未知':
+            plant_samples[plant][wtype] = sid
+
+    # 1. Missing test data
+    for entry in registry:
+        sid = entry['sample_id']
+        if sid not in test_data or not test_data[sid]:
+            issues.append(f"样品 {sid}（{entry['description']}）在原始记录中无任何检测数据")
+
+    # 2. pH range
+    for sid, items in test_data.items():
+        if not sid.startswith('W'):
+            continue
+        entry = next((e for e in registry if e['sample_id'] == sid), None)
+        label = f"{entry['description']}({sid})" if entry else sid
+        ph = items.get('pH')
+        if ph:
+            try:
+                phv = float(str(ph).replace('<', ''))
+                if phv < 5 or phv > 10:
+                    issues.append(f"[严重] {label} pH={phv} 异常（通常范围 5-10）")
+            except (ValueError, TypeError):
+                pass
+
+    # 3. Negative values
+    for sid, items in test_data.items():
+        entry = next((e for e in registry if e['sample_id'] == sid), None)
+        label = f"{entry['description']}({sid})" if entry else sid
+        for name, val in items.items():
+            try:
+                if float(str(val).replace('<', '').replace('＜', '')) < 0:
+                    issues.append(f"[严重] {label} 项目「{name}」值为负数({val})")
+            except (ValueError, TypeError):
+                pass
+
+    # 4. Chlorine: 管网水 should <= 出厂水
+    for plant, sids in plant_samples.items():
+        cc_sid = sids.get('出厂水')
+        gw_sid = sids.get('管网水') or sids.get('管网末梢水')
+        if not (cc_sid and gw_sid):
+            continue
+        cc_data, gw_data = test_data.get(cc_sid, {}), test_data.get(gw_sid, {})
+        for cl in ['游离氯', '二氧化氯']:
+            try:
+                ccv = float(str(cc_data.get(cl, '')).replace('<', ''))
+                gwv = float(str(gw_data.get(cl, '')).replace('<', ''))
+                if gwv > ccv * 1.1 and gwv > 0 and ccv > 0:
+                    issues.append(f"{plant} 管网水{cl}({gwv})高于出厂水({ccv})，需确认")
+            except (ValueError, TypeError):
+                pass
+
+    # 5. KMnO4: 出厂水 should <= 原水
+    for plant, sids in plant_samples.items():
+        cc_sid, yw_sid = sids.get('出厂水'), sids.get('原水')
+        if not (cc_sid and yw_sid):
+            continue
+        cc_data, yw_data = test_data.get(cc_sid, {}), test_data.get(yw_sid, {})
+        for key in ['高锰酸盐指数', '高锰酸盐指数(以O2计)']:
+            cc_v, yw_v = cc_data.get(key, ''), yw_data.get(key, '')
+            if cc_v and yw_v:
+                try:
+                    ccf = float(str(cc_v).replace('<', ''))
+                    ywf = float(str(yw_v).replace('<', ''))
+                    if ccf > ywf * 1.2:
+                        issues.append(f"{plant} 出厂水高锰酸盐指数({ccf})高于原水({ywf})，异常")
+                except (ValueError, TypeError):
+                    pass
+                break
+
+    # 6. Quality control samples (M/K series) negative check
+    for sid, items in test_data.items():
+        if not (sid.startswith('M') or sid.startswith('K')):
+            continue
+        for name, val in items.items():
+            try:
+                if float(str(val).replace('<', '').replace('＜', '')) < 0:
+                    issues.append(f"[严重] 质控样品 {sid} 项目「{name}」值为负数({val})")
+            except (ValueError, TypeError):
+                pass
+
+    # 7. Duplicate values detection (potential copy-paste errors)
+    item_val_samples = defaultdict(lambda: defaultdict(list))
+    for sid, items in test_data.items():
+        if not sid.startswith('W'):
+            continue
+        for name, val in items.items():
+            if val.startswith('<') or val.startswith('＜') or val in ('未检出', '无', '0'):
+                continue
+            try:
+                float(val)
+                if '.' in val and len(val.split('.')[1]) >= 3:
+                    item_val_samples[name][val].append(sid)
+            except ValueError:
+                pass
+    for name, val_map in item_val_samples.items():
+        for val, sids in val_map.items():
+            if len(sids) >= 4:
+                descs = [next((e['description'] for e in registry if e['sample_id'] == s), s) for s in sids[:5]]
+                issues.append(
+                    f"项目「{name}」有 {len(sids)} 个样品结果完全相同({val})，"
+                    f"涉及：{'、'.join(descs)}{'...' if len(sids) > 5 else ''}，请确认是否录入错误")
+
+    # 8. Turbidity logic: 出厂水 should be lower than 原水
+    for plant, sids in plant_samples.items():
+        cc_sid, yw_sid = sids.get('出厂水'), sids.get('原水')
+        if not (cc_sid and yw_sid):
+            continue
+        cc_turb = test_data.get(cc_sid, {}).get('浑浊度', '')
+        yw_turb = test_data.get(yw_sid, {}).get('浑浊度', '')
+        if cc_turb and yw_turb:
+            try:
+                ccf = float(str(cc_turb).replace('<', ''))
+                ywf = float(str(yw_turb).replace('<', ''))
+                if ccf > ywf and ywf > 0:
+                    issues.append(f"{plant} 出厂水浑浊度({ccf})高于原水({ywf})，异常")
+            except (ValueError, TypeError):
+                pass
+
+    # 9. Bacterial indicators: 出厂水/管网水 should be 0/未检出
+    for sid, items in test_data.items():
+        if not sid.startswith('W'):
+            continue
+        entry = next((e for e in registry if e['sample_id'] == sid), None)
+        if not entry:
+            continue
+        wtype = classify_sample_water_type(entry['description'])
+        if wtype not in ('出厂水', '管网水', '管网末梢水'):
+            continue
+        label = f"{entry['description']}({sid})"
+        for bact in ['菌落总数', '总大肠菌群', '大肠埃希氏菌']:
+            val = items.get(bact, '')
+            if not val or val in ('0', '未检出', '<1'):
+                continue
+            try:
+                if float(val) > 0:
+                    issues.append(f"{label} {bact}={val}，出厂水/管网水该指标通常应为0或未检出")
+            except (ValueError, TypeError):
+                pass
+
+    # 10. Same-source raw water consistency
+    source_groups = defaultdict(list)
+    for entry in registry:
+        sid = entry['sample_id']
+        if not sid.startswith('W') or '原水' not in entry['description']:
+            continue
+        m = re.search(r'[\(（]([^)）]+)[\)）]', entry['description'])
+        source = m.group(1) if m else entry['description']
+        source_groups[source].append((sid, entry))
+    for source, entries in source_groups.items():
+        if len(entries) < 2:
+            continue
+        for param in ['pH', '高锰酸盐指数', '溶解氧', '浑浊度']:
+            vals = {}
+            for sid, entry in entries:
+                v = test_data.get(sid, {}).get(param)
+                if v:
+                    try:
+                        vals[sid] = (float(str(v).replace('<', '')), entry['description'])
+                    except (ValueError, TypeError):
+                        pass
+            if len(vals) >= 2:
+                vlist = [v[0] for v in vals.values()]
+                if min(vlist) > 0 and max(vlist) / min(vlist) > 2:
+                    detail = ', '.join(f"{desc}={v}" for _, (v, desc) in vals.items())
+                    issues.append(f"同源原水「{source}」{param}差异较大：{detail}")
+
+    # 11. Logical consistency checks per sample
+    for sid, items in test_data.items():
+        if not sid.startswith('W'):
+            continue
+        entry = next((e for e in registry if e['sample_id'] == sid), None)
+        label = f"{entry['description']}({sid})" if entry else sid
+        issues.extend(check_data_logic(items, label))
+
+    # 12. Significant figures consistency within original records (grouped by water type)
+    wtype_items = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    for entry in registry:
+        sid = entry['sample_id']
+        if not sid.startswith('W') or sid not in test_data:
+            continue
+        wtype = classify_sample_water_type(entry['description'])
+        for param, val in test_data[sid].items():
+            s = str(val).strip().replace('＜', '<')
+            if not s or s.startswith('<') or s in ('未检出', '无', '0'):
+                continue
+            try:
+                fval = float(s)
+                if fval == 0:
+                    continue
+            except (ValueError, TypeError):
+                continue
+            sf = count_significant_figures(s)
+            wtype_items[wtype][param][sf].append((sid, entry['description'], s))
+    for wtype, params in wtype_items.items():
+        for param, sf_map in params.items():
+            if len(sf_map) <= 1:
+                continue
+            most = max(sf_map.items(), key=lambda x: len(x[1]))
+            for sf, entries in sf_map.items():
+                if sf != most[0] and len(entries) < len(most[1]):
+                    samples = ', '.join(f"{desc}={val}" for sid, desc, val in entries[:3])
+                    suffix = '...' if len(entries) > 3 else ''
+                    issues.append(
+                        f"原始记录({wtype})「{param}」有效位数不一致："
+                        f"{len(entries)}个样品为{sf}位，"
+                        f"多数({len(most[1])})为{most[0]}位，"
+                        f"涉及：{samples}{suffix}")
+
+    return issues
+
+
+def cross_verify_reports(registry, test_data, all_info):
+    """Cross-verify reports against original records."""
+    issues_verify = []
+    issues_logic = []
+
+    # Build sample_id -> report mapping
+    sid_to_report = {}
+    for fname, info in all_info.items():
+        sid = info.get('sample_id', '').strip()
+        if sid:
+            sid_to_report[sid] = (fname, info)
+
+    # A. Registry samples missing reports
+    for entry in registry:
+        sid = entry['sample_id']
+        if not sid.startswith('W'):
+            continue
+        if sid not in sid_to_report:
+            issues_verify.append(
+                f"原始记录样品 {sid}（{entry['description']}）未找到对应报告文件")
+
+    # B. Report sample_id not in registry
+    known_sids = {e['sample_id'] for e in registry}
+    for fname, info in all_info.items():
+        sid = info.get('sample_id', '').strip()
+        if sid and sid not in known_sids and re.match(r'[WKM]\d{6}C\d+', sid):
+            issues_verify.append(
+                f"报告 \"{fname}\" 样品编号「{sid}」在原始记录中无对应，可能属于其他批次")
+
+    # C. Company name consistency
+    for entry in registry:
+        sid = entry['sample_id']
+        if sid not in sid_to_report:
+            continue
+        fname, info = sid_to_report[sid]
+        expected, actual = entry['company'], info.get('company', '')
+        if expected and actual and expected not in actual and actual not in expected:
+            issues_verify.append(
+                f"报告 \"{fname}\" 被检单位不一致：原始记录「{expected}」，报告「{actual}」")
+
+    # D. Test data value comparison
+    for entry in registry:
+        sid = entry['sample_id']
+        if sid not in sid_to_report or sid not in test_data:
+            continue
+        fname, info = sid_to_report[sid]
+        orig_items = test_data[sid]
+        report_items = info.get('test_items', [])
+        is_raw = '原水' in entry['description']
+
+        for orig_name, orig_val in orig_items.items():
+            # Extract base name (before any paren/space+unit) for skip check
+            base_orig = orig_name.split('(')[0].split('（')[0].strip()
+            base_orig = base_orig.split(' ')[0] if ' ' in base_orig else base_orig
+            if base_orig in ('钙', '镁', '电导率', '水温'):
+                continue
+            if is_raw and orig_name in ('肉眼可见物', '臭和味'):
+                continue
+            matched = find_matching_report_item(report_items, orig_name)
+            if matched is None:
+                issues_verify.append(
+                    f"报告 \"{fname}\" 缺少原始记录项目「{orig_name}」(原始值={orig_val})")
+                continue
+            if not vals_match(orig_val, matched['result']):
+                o = re.sub(r'[、，,]+$', '', str(orig_val).strip()).replace('＜', '<')
+                r = re.sub(r'[、，,]+$', '', str(matched['result']).strip()).replace('＜', '<')
+                # Distinguish value difference vs formatting/sig-fig difference
+                try:
+                    ov, rv = float(o.replace('<', '')), float(r.replace('<', ''))
+                    is_value_diff = abs(ov - rv) > 0.0001
+                except (ValueError, TypeError):
+                    is_value_diff = True
+                if is_value_diff:
+                    tag = "[严重-数值] "
+                    detail = "数值不一致"
+                else:
+                    tag = "[严重-位数] "
+                    detail = "有效位数不一致"
+                issues_verify.append(
+                    f"{tag}报告 \"{fname}\" {detail} - 「{orig_name}」: "
+                    f"原始记录={orig_val}, 报告={matched['result']}")
+
+    # E. Cross-report logic: group by plant
+    plant_reports = defaultdict(dict)
+    for entry in registry:
+        sid = entry['sample_id']
+        if sid not in sid_to_report:
+            continue
+        wtype = classify_sample_water_type(entry['description'])
+        plant = extract_plant_from_desc(entry['description'])
+        if plant and wtype != '未知':
+            plant_reports[plant][wtype] = sid_to_report[sid]
+
+    for plant, tm in plant_reports.items():
+        # Chlorine: 管网 <= 出厂
+        cc = tm.get('出厂水')
+        gw = tm.get('管网水') or tm.get('管网末梢水')
+        if cc and gw:
+            for cl in ['游离氯', '二氧化氯']:
+                cc_i = find_matching_report_item(cc[1].get('test_items', []), cl)
+                gw_i = find_matching_report_item(gw[1].get('test_items', []), cl)
+                if cc_i and gw_i:
+                    try:
+                        ccv = float(cc_i['result'].replace('<', '').replace('＜', ''))
+                        gwv = float(gw_i['result'].replace('<', '').replace('＜', ''))
+                        if gwv > ccv * 1.1 and ccv > 0:
+                            issues_logic.append(
+                                f"{plant} 管网水({gw[0]}){cl}({gwv})高于出厂水({cc[0]})({ccv})")
+                    except (ValueError, TypeError):
+                        pass
+
+        # KMnO4: 出厂 <= 原水
+        yw = tm.get('原水')
+        if cc and yw:
+            for kn in ['高锰酸盐指数(以O2计)', '高锰酸盐指数']:
+                cc_i = find_matching_report_item(cc[1].get('test_items', []), kn)
+                yw_i = find_matching_report_item(yw[1].get('test_items', []), kn)
+                if cc_i and yw_i:
+                    try:
+                        ccv = float(cc_i['result'].replace('<', '').replace('＜', ''))
+                        ywv = float(yw_i['result'].replace('<', '').replace('＜', ''))
+                        if ccv > ywv * 1.5:
+                            issues_logic.append(
+                                f"{plant} 出厂水({cc[0]})高锰酸盐指数({ccv})"
+                                f"显著高于原水({yw[0]})({ywv})")
+                    except (ValueError, TypeError):
+                        pass
+                    break
+
+    # F. Logical consistency per report
+    for fname, info in all_info.items():
+        items_dict = {item['name']: item['result'] for item in info.get('test_items', [])}
+        if items_dict:
+            issues_logic.extend(check_data_logic(items_dict, f"报告\"{fname}\""))
+
+    # G. Conclusion vs actual data - flag if "合格/符合" but has exceedances
+    for fname, info in all_info.items():
+        conclusion = info.get('conclusion', '')
+        if not conclusion or '不' in conclusion:
+            continue
+        if not ('符合' in conclusion or '合格' in conclusion or '满足' in conclusion):
+            continue
+        for item in info.get('test_items', []):
+            result = item['result'].replace('＜', '<')
+            standard = item['standard']
+            if not result or result.startswith('<') or '水温' in item['name']:
+                continue
+            if result in ('无', '未检出', '无异臭、异味', '0'):
+                continue
+            try:
+                val = float(result)
+            except (ValueError, TypeError):
+                continue
+            std_m = re.search(r'[≤<]\s*([\d.]+)', standard)
+            if std_m:
+                try:
+                    if val > float(std_m.group(1)):
+                        issues_verify.append(
+                            f"报告 \"{fname}\" 结论为「{conclusion[:50]}」，"
+                            f"但「{item['name']}」结果({result})超标({standard})，结论与数据矛盾")
+                        break
+                except (ValueError, TypeError):
+                    pass
+
+    # G. Raw water standard reference
+    for fname, info in all_info.items():
+        if info.get('water_type') != '原水':
+            continue
+        std = info.get('product_standard', '')
+        conclusion = info.get('conclusion', '')
+        if '生活饮用水' in std or '5749' in std:
+            issues_verify.append(
+                f"报告 \"{fname}\" 为原水报告但引用了生活饮用水标准，通常应引用地表水标准（GB 3838）")
+        elif conclusion and '生活饮用水' in conclusion:
+            issues_verify.append(
+                f"报告 \"{fname}\" 为原水报告但结论中引用了生活饮用水标准，请确认")
+
+    # H. Sampling location consistency
+    for entry in registry:
+        sid = entry['sample_id']
+        if sid not in sid_to_report:
+            continue
+        fname, info = sid_to_report[sid]
+        reg_desc = entry['description']
+        report_loc = info.get('sampling_location', '')
+        if not (reg_desc and report_loc):
+            continue
+        m = re.search(r'[\(（]([^)）]+)[\)）]', reg_desc)
+        if m:
+            key_loc = m.group(1)
+            plant = extract_plant_from_desc(reg_desc)
+            if key_loc not in report_loc and report_loc not in key_loc:
+                if plant and plant not in report_loc:
+                    issues_verify.append(
+                        f"报告 \"{fname}\" 采样地点可能不一致：原始记录「{reg_desc}」，"
+                        f"报告「{report_loc}」")
+
+    # I. Testing method consistency across same-type reports
+    type_methods = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    for fname, info in all_info.items():
+        wt = info.get('water_type', '')
+        for item in info.get('test_items', []):
+            if item.get('method'):
+                type_methods[wt][item['name']][normalize_method(item['method'])].append(fname)
+    for wt, items_map in type_methods.items():
+        for item_name, methods in items_map.items():
+            if len(methods) <= 1:
+                continue
+            most_common = max(methods.items(), key=lambda x: len(x[1]))
+            for method, fnames in methods.items():
+                if method != most_common[0] and len(fnames) < len(most_common[1]):
+                    issues_logic.append(
+                        f"同类型({wt})报告「{item_name}」检测方法不一致："
+                        f"{len(fnames)}个使用「{method}」，"
+                        f"多数({len(most_common[1])})使用「{most_common[0]}」，"
+                        f"涉及：{', '.join(fnames[:3])}{'...' if len(fnames) > 3 else ''}")
+
+    return issues_verify, issues_logic
+
+
 # ─────────────────── MAIN ANALYSIS ───────────────────
 
-def main():
-    files = sorted([f for f in os.listdir(REPORT_DIR)
-                    if f.endswith(('.xlsx', '.xls')) and not f.startswith('~')])
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="水质检测报告验证分析脚本 —— 扫描指定目录下的 .xlsx/.xls 报告文件并输出待确认问题清单。",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""示例:
+  %(prog)s                          # 扫描脚本所在目录
+  %(prog)s /path/to/reports         # 扫描指定目录
+  %(prog)s ./report/0189-0211       # 扫描相对路径目录
+  %(prog)s -r /path/to/reports      # 同上（使用 -r 参数）
+  %(prog)s -o result.txt            # 自定义输出文件名
+""")
+    parser.add_argument('directory', nargs='?', default=None,
+                        help='报告文件所在目录（默认为脚本所在目录）')
+    parser.add_argument('-r', '--report-dir', default=None,
+                        help='报告文件所在目录（与位置参数等效，位置参数优先）')
+    parser.add_argument('-o', '--output', default=None,
+                        help='输出文件路径（默认为扫描目录下的"待确认问题清单.txt"）')
+    return parser.parse_args()
 
+
+def main():
+    args = parse_args()
+
+    # 确定扫描目录：位置参数 > -r 参数 > 脚本所在目录
+    report_dir = args.directory or args.report_dir or os.path.dirname(os.path.abspath(__file__))
+    report_dir = os.path.abspath(report_dir)
+
+    if not os.path.isdir(report_dir):
+        print(f"错误：目录不存在 —— {report_dir}")
+        sys.exit(1)
+
+    output_file = args.output or os.path.join(report_dir, "待确认问题清单.txt")
+    output_file = os.path.abspath(output_file)
+
+    # ══════════════════════════════════════════════════════
+    # Phase 1: Find and read original record
+    # ══════════════════════════════════════════════════════
+    orig_record_file = find_original_record_file(report_dir)
+
+    # 原始记录文件名，需从报告列表中排除
+    orig_basename = os.path.basename(orig_record_file) if orig_record_file else None
+    files = sorted([f for f in os.listdir(report_dir)
+                    if f.endswith(('.xlsx', '.xls')) and not f.startswith('~')
+                    and f != orig_basename])
+
+    print(f"扫描目录：{report_dir}")
     print(f"共找到 {len(files)} 个报告文件，开始分析...")
 
     if not files:
-        print("\n未找到任何 .xlsx / .xls 报告文件，请将报告文件放入扫描目录后重试。")
-        print(f"扫描目录：{REPORT_DIR}")
+        print("\n未��到任何 .xlsx / .xls 报告文件，请将报告文件放入扫描目录后重试。")
+        print(f"扫描目录：{report_dir}")
         return
+    registry, orig_test_data = [], {}
+    issues_original = []
+
+    if orig_record_file:
+        orig_fname = os.path.basename(orig_record_file)
+        print(f"找到原始记录文件：{orig_fname}")
+        try:
+            registry, orig_test_data = read_original_record(orig_record_file)
+            print(f"  样品登记：{len(registry)} 条")
+            print(f"  检测数据：{len(orig_test_data)} 个样品")
+            print("正在检查原始记录...")
+            issues_original = check_original_records(registry, orig_test_data)
+            print(f"  原始记录问题：{len(issues_original)} 项")
+        except Exception as e:
+            print(f"  原始记录读取失败：{e}")
+            traceback.print_exc()
+    else:
+        print("未找到原始记录文件（如 260205-1-25.xlsx），跳过原始记录检查与交叉验证。")
+    print()
+
+    # ══════════════════════════════════════════════════════
+    # Phase 2: Read and check report files
+    # ══════════════════════════════════════════════════════
 
     # ── Collect all file info ──
     all_info = {}  # fname -> info dict
     for i, fname in enumerate(files):
-        filepath = os.path.join(REPORT_DIR, fname)
+        filepath = os.path.join(report_dir, fname)
         if fname.endswith('.xlsx'):
             info = read_xlsx_report_info(filepath)
         else:
@@ -414,9 +1285,9 @@ def main():
             if p and len(p) != 4:
                 issues_naming.append(f"文件 \"{fname}\" 编号前缀位数异常：'{p}' 为 {len(p)} 位，多数文件为 4 位")
 
-    # 3. Number sequence gaps
+    # 3. Number sequence gaps (only within actual file range)
     nums = sorted(set(int(p) for _, p in prefixes if p))
-    expected = set(range(1, max(nums) + 1))
+    expected = set(range(min(nums), max(nums) + 1))
     actual = set(nums)
     missing = sorted(expected - actual)
     if missing:
@@ -573,13 +1444,54 @@ def main():
         if 'report_date' not in info and 'read_error' not in info:
             issues_data.append(f"文件 \"{fname}\" 未提取到报告编制日期")
 
-    # ──────────── 四、格式/模板问题 ────────────
-    # Group by water type, compare sheet counts and structures
+        # Duplicate test items within a single report
+        item_names = [item['name'] for item in test_items]
+        name_counts = Counter(item_names)
+        for name, cnt in name_counts.items():
+            if cnt > 1:
+                issues_data.append(f"文件 \"{fname}\" 检测项目「{name}」重复出现 {cnt} 次")
+
+    # ──────────── 有效位数一致性 ────────────
+    # Group by water type (also used later for format checks)
     type_groups = defaultdict(list)
     for fname, info in all_info.items():
         wt = info['water_type']
         type_groups[wt].append((fname, info))
 
+    for wt, group in type_groups.items():
+        if len(group) < 2:
+            continue
+        item_sigfigs = defaultdict(lambda: defaultdict(list))
+        for fname, info in group:
+            for item in info.get('test_items', []):
+                result = item['result']
+                if not result:
+                    continue
+                if result.startswith('<') or result.startswith('＜'):
+                    continue
+                if result in ('未检出', '无', '无异臭、异味', '0'):
+                    continue
+                try:
+                    fval = float(result)
+                    if fval == 0:
+                        continue
+                except (ValueError, TypeError):
+                    continue
+                sf = count_significant_figures(result)
+                item_sigfigs[item['name']][sf].append(fname)
+        for item_name, sf_map in item_sigfigs.items():
+            if len(sf_map) <= 1:
+                continue
+            most = max(sf_map.items(), key=lambda x: len(x[1]))
+            for sf, fnames in sf_map.items():
+                if sf != most[0] and len(fnames) < len(most[1]):
+                    issues_data.append(
+                        f"同类型({wt})报告「{item_name}」有效位数不一致："
+                        f"{len(fnames)}个报告为{sf}位有效数字，"
+                        f"多数({len(most[1])})为{most[0]}位有效数字，"
+                        f"涉及：{', '.join(fnames[:3])}{'...' if len(fnames) > 3 else ''}")
+
+    # ──────────── 四、格式/模板问题 ────────────
     for wt, group in type_groups.items():
         if len(group) < 2:
             continue
@@ -904,30 +1816,51 @@ def main():
         if 'read_error' in info:
             issues_read_errors.append(f"文件 \"{fname}\" 读取异常：{info['read_error']}")
 
+    # ──────────── 交叉验证 ────────────
+    issues_cross_verify = []
+    issues_cross_logic = []
+    if registry and orig_test_data:
+        print("正在进行交叉验证...")
+        issues_cross_verify, issues_cross_logic = cross_verify_reports(
+            registry, orig_test_data, all_info)
+        print(f"  数据一致性问题：{len(issues_cross_verify)} 项")
+        print(f"  逻辑关系问题：{len(issues_cross_logic)} 项")
+
     # ════════════════════════════════════════════════════
     # Output
     # ════════════════════════════════════════════════════
     lines = []
     lines.append("=" * 72)
-    lines.append("        水质检测报告 —— 待确认问题清单")
+    lines.append("    水质检测报告验证 —— 待确认问题清单")
     lines.append("=" * 72)
     lines.append(f"生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    lines.append(f"扫描目录：{REPORT_DIR}")
-    lines.append(f"扫描文件总数：{len(files)}")
+    lines.append(f"扫描目录：{report_dir}")
+    if orig_record_file:
+        lines.append(f"原始记录：{os.path.basename(orig_record_file)}")
+    lines.append(f"报告文件数：{len(files)}")
     lines.append("")
 
-    total_issues = (len(issues_naming) + len(issues_numbering) + len(issues_data)
-                    + len(issues_format) + len(issues_date) + len(issues_consistency)
-                    + len(issues_values) + len(issues_read_errors))
+    all_sections = [
+        ("一、原始记录检查", issues_original),
+        ("二、交叉验证 - 数据一致性", issues_cross_verify),
+        ("三、交叉验证 - 逻辑关系", issues_cross_logic),
+        ("四、报告命名问题", issues_naming),
+        ("五、报告编号问题", issues_numbering),
+        ("六、报告数据问题", issues_data),
+        ("七、报告格式/模板问题", issues_format),
+        ("八、报告日期问题", issues_date),
+        ("九、报告一致性问题", issues_consistency),
+        ("十、报告异常值问题", issues_values),
+        ("十一、文件读取问题", issues_read_errors),
+    ]
+
+    total_issues = sum(len(s[1]) for s in all_sections)
     lines.append(f"共发现 {total_issues} 项待确认问题，分类如下：")
-    lines.append(f"  一、命名问题：{len(issues_naming)} 项")
-    lines.append(f"  二、编号问题：{len(issues_numbering)} 项")
-    lines.append(f"  三、数据问题：{len(issues_data)} 项")
-    lines.append(f"  四、格式/模板问题：{len(issues_format)} 项")
-    lines.append(f"  五、日期问题：{len(issues_date)} 项")
-    lines.append(f"  六、一致性问题：{len(issues_consistency)} 项")
-    lines.append(f"  七、异常值问题：{len(issues_values)} 项（其中严重 {len(issues_values_critical)} 项，一般 {len(issues_values_normal)} 项）")
-    lines.append(f"  八、文件读取问题：{len(issues_read_errors)} 项")
+    for title, items in all_sections:
+        extra = ""
+        if "异常值" in title:
+            extra = f"（严重 {len(issues_values_critical)} / 一般 {len(issues_values_normal)}）"
+        lines.append(f"  {title}：{len(items)} 项{extra}")
     lines.append("")
 
     global_counter = 0
@@ -944,14 +1877,8 @@ def main():
             lines.append(f"  {global_counter}. {issue}")
         lines.append("")
 
-    write_section("一、命名问题", issues_naming)
-    write_section("二、编号问题", issues_numbering)
-    write_section("三、数据问题", issues_data)
-    write_section("四、格式/模板问题", issues_format)
-    write_section("五、日期问题", issues_date)
-    write_section("六、一致性问题", issues_consistency)
-    write_section("七、异常值问题", issues_values)
-    write_section("八、文件读取问题", issues_read_errors)
+    for title, items in all_sections:
+        write_section(title, items)
 
     lines.append("=" * 72)
     lines.append("以上问题均为程序自动检测，可能存在误报，请人工逐项核实。")
@@ -959,11 +1886,11 @@ def main():
 
     output_text = '\n'.join(lines)
 
-    with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
+    with open(output_file, 'w', encoding='utf-8') as f:
         f.write(output_text)
 
     print(f"\n分析完成！共发现 {total_issues} 项待确认问题。")
-    print(f"结果已写入：{OUTPUT_FILE}")
+    print(f"结果已写入：{output_file}")
 
     return output_text
 

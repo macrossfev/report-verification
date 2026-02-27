@@ -1,0 +1,1524 @@
+{
+  "overall": {
+    "total": 254,
+    "matched": 253,
+    "mismatched": 1,
+    "missing": 0,
+    "accuracy": 99.6,
+    "error_rate": 0.4,
+    "missing_rate": 0.0
+  },
+  "sections": {
+    "detection_results": {
+      "total_values": 52,
+      "matched": 52,
+      "mismatched": 0,
+      "missing": 0,
+      "extra": 0,
+      "details": {
+        "pH": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "7.15"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "7.32"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "7.26"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "7.34"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "7.13"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "numeric_close",
+              "value": "7.2"
+            }
+          }
+        },
+        "五日生化需氧量(mg/L)": {
+          "values": {
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<2.00"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<2.00"
+            }
+          }
+        },
+        "化学需氧量(mg/L)": {
+          "values": {
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "10.0"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "9.7"
+            }
+          }
+        },
+        "大肠埃希氏菌(CFU/100mL)": {
+          "values": {
+            "K260127C12": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0"
+            },
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0"
+            },
+            "W260127C09": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0"
+            }
+          }
+        },
+        "总大肠菌群(CFU/100mL)": {
+          "values": {
+            "K260127C12": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0"
+            },
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0"
+            },
+            "W260127C09": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0"
+            }
+          }
+        },
+        "水温(℃)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "14.0"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "13.5"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "14.8"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "15.6"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "14.6"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "15.1"
+            }
+          }
+        },
+        "溶解氧(mg/L)": {
+          "values": {
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "3.85"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "3.36"
+            }
+          }
+        },
+        "电导率(uS/cm)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "150"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "215"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "152"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "214"
+            }
+          }
+        },
+        "粪大肠菌群(MPN/L)": {
+          "values": {
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<10"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<10"
+            }
+          }
+        },
+        "色度(度)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<5"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<5"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<5"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<5"
+            }
+          }
+        },
+        "菌落总数(CFU/mL)": {
+          "values": {
+            "K260127C12": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0"
+            },
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0"
+            },
+            "W260127C09": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0"
+            }
+          }
+        },
+        "高锰酸盐指数(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "1.68"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "1.28"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "1.52"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "1.36"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "2.72"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "numeric_close",
+              "value": "2.4"
+            }
+          }
+        }
+      }
+    },
+    "chemical_analysis": {
+      "total_values": 164,
+      "matched": 163,
+      "mismatched": 1,
+      "missing": 0,
+      "extra": 0,
+      "details": {
+        "三氯乙酸(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.035"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.035"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.035"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.035"
+            }
+          }
+        },
+        "二氯乙酸(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.025"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.025"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.025"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.025"
+            }
+          }
+        },
+        "亚氯酸盐(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "numeric_close",
+              "value": "0.16"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.050"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.084"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.050"
+            }
+          }
+        },
+        "六价铬(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.010"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.010"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.010"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.010"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.010"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.010"
+            }
+          }
+        },
+        "总氮(mg/L)": {
+          "values": {
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "1.28"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "numeric_close",
+              "value": "0.9"
+            }
+          }
+        },
+        "总硬度(以CaCO3计)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "67.1"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "81.3"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "61.0"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "81.3"
+            }
+          }
+        },
+        "总磷(mg/L)": {
+          "values": {
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.020"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.020"
+            }
+          }
+        },
+        "挥发酚(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.002"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.002"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.002"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.002"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.002"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.002"
+            }
+          }
+        },
+        "氟化物(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.112"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.111"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.114"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.115"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.109"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.115"
+            }
+          }
+        },
+        "氨(以N计)(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.020"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.020"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.020"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.020"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.034"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.020"
+            }
+          }
+        },
+        "氯化物(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "wrong",
+              "detail": "numeric_mismatch(err=90.0%)",
+              "extracted": "0.866",
+              "truth": "8.66"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "18.3"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "8.29"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "18.0"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "5.71"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "6.11"
+            }
+          }
+        },
+        "氯酸盐(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.096"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "numeric_close",
+              "value": "0.07"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.055"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.067"
+            }
+          }
+        },
+        "氰化物(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.002"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.002"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.002"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.002"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.002"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.002"
+            }
+          }
+        },
+        "汞(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.00005"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.00005"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.00005"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.00005"
+            },
+            "W260127C09": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.00005"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.00005"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.00005"
+            }
+          }
+        },
+        "溶解性总固体(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "181"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "123"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "71"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "113"
+            }
+          }
+        },
+        "石油类(mg/L)": {
+          "values": {
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.04"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.04"
+            }
+          }
+        },
+        "砷(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0034"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0034"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0034"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0034"
+            },
+            "W260127C09": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0034"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0034"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0034"
+            }
+          }
+        },
+        "硒(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0030"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0030"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0030"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0030"
+            },
+            "W260127C09": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0030"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0030"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0030"
+            }
+          }
+        },
+        "硝酸盐(以N计)(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.74"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.66"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.74"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.64"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.71"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.65"
+            }
+          }
+        },
+        "硫化物(mg/L)": {
+          "values": {
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.020"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.020"
+            }
+          }
+        },
+        "硫酸盐(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "11.2"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "15.1"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "11.7"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "18.1"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "11.4"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "15.1"
+            }
+          }
+        },
+        "钙(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "20.4"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "26.8"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "20.5"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "26.4"
+            },
+            "W260127C09": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "20.2"
+            }
+          }
+        },
+        "铁(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.030"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.030"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.030"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.030"
+            },
+            "W260127C09": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.030"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.063"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "numeric_close",
+              "value": "0.07"
+            }
+          }
+        },
+        "铅(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0050"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0050"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0050"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0050"
+            },
+            "W260127C09": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0050"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0050"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.0050"
+            }
+          }
+        },
+        "铜(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.010"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.010"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.010"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.010"
+            },
+            "W260127C09": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.010"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.010"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.010"
+            }
+          }
+        },
+        "铝(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.030"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.243"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.030"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.206"
+            },
+            "W260127C09": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.030"
+            }
+          }
+        },
+        "锌(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.005"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.005"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.005"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.005"
+            },
+            "W260127C09": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.005"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.005"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.005"
+            }
+          }
+        },
+        "锰(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.010"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.010"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.010"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.010"
+            },
+            "W260127C09": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.010"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.646"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.098"
+            }
+          }
+        },
+        "镁(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "2.38"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "2.64"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "2.43"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "2.54"
+            },
+            "W260127C09": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "2.64"
+            }
+          }
+        },
+        "镉(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.002"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.002"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.002"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.002"
+            },
+            "W260127C09": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.002"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.002"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.002"
+            }
+          }
+        },
+        "阴离子合成洗涤剂(mg/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.050"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.050"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.050"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.050"
+            },
+            "W260127C10": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.050"
+            },
+            "W260127C11": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.050"
+            }
+          }
+        }
+      }
+    },
+    "trihalomethanes": {
+      "total_values": 30,
+      "matched": 30,
+      "mismatched": 0,
+      "missing": 0,
+      "extra": 0,
+      "details": {
+        "一氯二溴甲烷(mg/L)": {
+          "values": {
+            "K260127C12": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.000084"
+            },
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.000084"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.000084"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.000084"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.000084"
+            }
+          }
+        },
+        "三卤甲烷(总量)": {
+          "values": {
+            "K260127C12": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.0012"
+            },
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.078"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.32"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.051"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.35"
+            }
+          }
+        },
+        "三氯甲烷(mg/L)": {
+          "values": {
+            "K260127C12": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.000018"
+            },
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.00323"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.0163"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.00216"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.0177"
+            }
+          }
+        },
+        "三溴甲烷(mg/L)": {
+          "values": {
+            "K260127C12": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.000075"
+            },
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.000075"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.000075"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.000075"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.000075"
+            }
+          }
+        },
+        "二氯一溴甲烷(mg/L)": {
+          "values": {
+            "K260127C12": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.000026"
+            },
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.00141"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.00309"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "numeric_close",
+              "value": "0.00086"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.00336"
+            }
+          }
+        },
+        "四氯化碳(mg/L)": {
+          "values": {
+            "K260127C12": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.000018"
+            },
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.000018"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.000018"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.000018"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "<0.000018"
+            }
+          }
+        }
+      }
+    },
+    "radioactivity": {
+      "total_values": 8,
+      "matched": 8,
+      "mismatched": 0,
+      "missing": 0,
+      "extra": 0,
+      "details": {
+        "总α(Bq/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.046±0.009"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.073±0.011"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.107±0.015"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.045±0.008"
+            }
+          }
+        },
+        "总β(Bq/L)": {
+          "values": {
+            "W260127C05": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.095±0.010"
+            },
+            "W260127C06": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.089±0.011"
+            },
+            "W260127C07": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.103±0.017"
+            },
+            "W260127C08": {
+              "status": "correct",
+              "detail": "exact_match",
+              "value": "0.079±0.013"
+            }
+          }
+        }
+      }
+    }
+  }
+}

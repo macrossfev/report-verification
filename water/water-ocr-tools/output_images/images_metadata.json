@@ -1,0 +1,67 @@
+{
+  "source_pdf": "/Users/caoer115/Library/Mobile Documents/com~apple~CloudDocs/Documents/Water/260127-5-11.pdf",
+  "total_pages": 6,
+  "dpi": 300,
+  "images": [
+    {
+      "page": 1,
+      "filename": "page_1.png",
+      "path": "/Users/Shared/projects/lockin/tg-mesh-proxy/water-ocr-tools/output_images/page_1.png",
+      "width": 3484,
+      "height": 2480,
+      "size_bytes": 642279,
+      "size_mb": 0.61,
+      "dpi": 300
+    },
+    {
+      "page": 2,
+      "filename": "page_2.png",
+      "path": "/Users/Shared/projects/lockin/tg-mesh-proxy/water-ocr-tools/output_images/page_2.png",
+      "width": 3500,
+      "height": 2471,
+      "size_bytes": 901368,
+      "size_mb": 0.86,
+      "dpi": 300
+    },
+    {
+      "page": 3,
+      "filename": "page_3.png",
+      "path": "/Users/Shared/projects/lockin/tg-mesh-proxy/water-ocr-tools/output_images/page_3.png",
+      "width": 2475,
+      "height": 3500,
+      "size_bytes": 438569,
+      "size_mb": 0.42,
+      "dpi": 300
+    },
+    {
+      "page": 4,
+      "filename": "page_4.png",
+      "path": "/Users/Shared/projects/lockin/tg-mesh-proxy/water-ocr-tools/output_images/page_4.png",
+      "width": 2480,
+      "height": 3496,
+      "size_bytes": 771964,
+      "size_mb": 0.74,
+      "dpi": 300
+    },
+    {
+      "page": 5,
+      "filename": "page_5.png",
+      "path": "/Users/Shared/projects/lockin/tg-mesh-proxy/water-ocr-tools/output_images/page_5.png",
+      "width": 2480,
+      "height": 3505,
+      "size_bytes": 278935,
+      "size_mb": 0.27,
+      "dpi": 300
+    },
+    {
+      "page": 6,
+      "filename": "page_6.png",
+      "path": "/Users/Shared/projects/lockin/tg-mesh-proxy/water-ocr-tools/output_images/page_6.png",
+      "width": 2475,
+      "height": 3505,
+      "size_bytes": 199667,
+      "size_mb": 0.19,
+      "dpi": 300
+    }
+  ]
+}
