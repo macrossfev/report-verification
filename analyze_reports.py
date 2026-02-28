@@ -213,7 +213,7 @@ def read_xls_report_info(filepath):
     """Read key metadata from an xls file."""
     info = {}
     try:
-        wb = xlrd.open_workbook(filepath)
+        wb = xlrd.open_workbook(filepath, formatting_info=True)
         info['sheet_count'] = wb.nsheets
         info['sheet_names'] = wb.sheet_names()
 
@@ -329,11 +329,21 @@ def read_xls_report_info(filepath):
                         try:
                             seq = int(float(str(a_val)))
                             if 1 <= seq <= 100 and b_val:
+                                # Get xls cell number format for result column
+                                d_fmt = None
+                                try:
+                                    xf_idx = ws.cell_xf_index(r, 3)
+                                    fmt_key = wb.xf_list[xf_idx].format_key
+                                    d_fmt = wb.format_map.get(fmt_key, None)
+                                    if d_fmt:
+                                        d_fmt = d_fmt.format_str
+                                except Exception:
+                                    pass
                                 item = {
                                     'seq': seq,
                                     'name': str(b_val).strip(),
                                     'unit': str(ws.cell_value(r, 2) or '').strip(),
-                                    'result': str(d_val).strip() if d_val not in ('', None) else '',
+                                    'result': format_cell_number(d_val, d_fmt) if d_val not in ('', None) else '',
                                     'standard': str(ws.cell_value(r, 4) or '').strip(),
                                     'method': str(ws.cell_value(r, 5) or '').strip(),
                                 }
@@ -515,26 +525,15 @@ def normalize_method(method_str):
     return s.strip()
 
 
-def count_significant_figures(value_str):
-    """Count significant figures from string representation of a number.
+def count_digits(value_str):
+    """Count total digit count in a number string (all digits including zeros).
 
-    The ones-place zero counts as significant (water quality convention):
-    '17.6' -> 3, '7.63' -> 3, '0.64' -> 3, '1.00' -> 3, '0.005' -> 2, '100' -> 3
+    '17.6' -> 3, '7.63' -> 3, '0.64' -> 3, '1.00' -> 3, '0.005' -> 4, '100' -> 3
     """
     s = value_str.strip()
     if s.startswith('-') or s.startswith('+'):
         s = s[1:]
-    s_no_dot = s.replace('.', '')
-    stripped = s_no_dot.lstrip('0')
-    if not stripped:
-        return 1  # "0" or "0.0" etc.
-    std_sf = len(stripped)
-    # If value is in (0, 1), the ones-place 0 counts as a significant figure
-    if '.' in s:
-        int_part = s.split('.')[0]
-        if int_part.lstrip('0') == '':
-            std_sf += 1
-    return std_sf
+    return len(s.replace('.', ''))
 
 
 def read_original_record(filepath):
@@ -625,9 +624,11 @@ def read_original_record(filepath):
                 if not cname or '项' in cname and '目' in cname:
                     continue
                 for c, sid in sample_cols.items():
-                    val = ws.cell(r, c).value
+                    cell = ws.cell(r, c)
+                    val = cell.value
                     if val is not None and str(val).strip():
-                        test_data[sid][cname] = re.sub(r'[、，,]+$', '', str(val).strip())
+                        formatted = format_cell_number(val, cell.number_format)
+                        test_data[sid][cname] = re.sub(r'[、，,]+$', '', formatted)
         else:
             # Layout B: sample IDs in col 1, item names in header columns
             item_cols = {}
@@ -644,9 +645,11 @@ def read_original_record(filepath):
                     if v and re.match(sid_pattern, str(v).strip()):
                         sid = str(v).strip()
                         for c, iname in item_cols.items():
-                            val = ws.cell(r, c).value
+                            cell = ws.cell(r, c)
+                            val = cell.value
                             if val is not None and str(val).strip():
-                                test_data[sid][iname] = re.sub(r'[、，,]+$', '', str(val).strip())
+                                formatted = format_cell_number(val, cell.number_format)
+                                test_data[sid][iname] = re.sub(r'[、，,]+$', '', formatted)
 
     wb.close()
     return registry, dict(test_data)
@@ -915,7 +918,7 @@ def check_original_records(registry, test_data):
                     continue
             except (ValueError, TypeError):
                 continue
-            sf = count_significant_figures(s)
+            sf = count_digits(s)
             wtype_items[wtype][param][sf].append((sid, entry['description'], s))
     for wtype, params in wtype_items.items():
         for param, sf_map in params.items():
@@ -924,10 +927,10 @@ def check_original_records(registry, test_data):
             most = max(sf_map.items(), key=lambda x: len(x[1]))
             for sf, entries in sf_map.items():
                 if sf != most[0] and len(entries) < len(most[1]):
-                    samples = ', '.join(f"{desc}={val}" for sid, desc, val in entries[:3])
+                    samples = ', '.join(f"{desc}(样品编号{sid})={val}" for sid, desc, val in entries[:3])
                     suffix = '...' if len(entries) > 3 else ''
                     issues.append(
-                        f"原始记录({wtype})「{param}」有效位数不一致："
+                        f"原始记录({wtype})「{param}」数字位数不一致："
                         f"{len(entries)}个样品为{sf}位，"
                         f"多数({len(most[1])})为{most[0]}位，"
                         f"涉及：{samples}{suffix}")
@@ -1012,7 +1015,7 @@ def cross_verify_reports(registry, test_data, all_info):
                     detail = "数值不一致"
                 else:
                     tag = "[严重-位数] "
-                    detail = "有效位数不一致"
+                    detail = "数字位数不一致"
                 issues_verify.append(
                     f"{tag}报告 \"{fname}\" {detail} - 「{orig_name}」: "
                     f"原始记录={orig_val}, 报告={matched['result']}")
@@ -1174,6 +1177,8 @@ def parse_args():
                         help='报告文件所在目录（与位置参数等效，位置参数优先）')
     parser.add_argument('-o', '--output', default=None,
                         help='输出文件路径（默认为扫描目录下的"待确认问题清单.txt"）')
+    parser.add_argument('-ori', action='store_true',
+                        help='仅检查原始记录，不检查报告文件')
     return parser.parse_args()
 
 
@@ -1228,6 +1233,37 @@ def main():
     else:
         print("未找到原始记录文件（如 260205-1-25.xlsx），跳过原始记录检查与交叉验证。")
     print()
+
+    # ── -ori 模式：仅输出原始记录检查结果 ──
+    if args.ori:
+        ori_output = output_file if args.output else os.path.join(report_dir, "原始记录检查结果.txt")
+        lines = []
+        lines.append("=" * 72)
+        lines.append("    原始记录检查 —— 问题清单")
+        lines.append("=" * 72)
+        lines.append(f"生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        lines.append(f"扫描目录：{report_dir}")
+        if orig_record_file:
+            lines.append(f"原始记录：{os.path.basename(orig_record_file)}")
+        lines.append("")
+        lines.append(f"共发现 {len(issues_original)} 项待确认问题")
+        lines.append("-" * 72)
+        if not issues_original:
+            lines.append("  （无）")
+        for i, issue in enumerate(issues_original, 1):
+            lines.append(f"  {i}. {issue}")
+        lines.append("")
+        lines.append("=" * 72)
+        lines.append("以上问题均为程序自动检测，可能存在误报，请人工逐项核实。")
+        lines.append("=" * 72)
+
+        output_text = '\n'.join(lines)
+        with open(ori_output, 'w', encoding='utf-8') as f:
+            f.write(output_text)
+
+        print(f"\n原始记录检查完成！共发现 {len(issues_original)} 项待确认问题。")
+        print(f"结果已写入：{ori_output}")
+        return output_text
 
     # ══════════════════════════════════════════════════════
     # Phase 2: Read and check report files
@@ -1451,7 +1487,7 @@ def main():
             if cnt > 1:
                 issues_data.append(f"文件 \"{fname}\" 检测项目「{name}」重复出现 {cnt} 次")
 
-    # ──────────── 有效位数一致性 ────────────
+    # ──────────── 数字位数一致性 ────────────
     # Group by water type (also used later for format checks)
     type_groups = defaultdict(list)
     for fname, info in all_info.items():
@@ -1477,19 +1513,21 @@ def main():
                         continue
                 except (ValueError, TypeError):
                     continue
-                sf = count_significant_figures(result)
-                item_sigfigs[item['name']][sf].append(fname)
+                sf = count_digits(result)
+                item_sigfigs[item['name']][sf].append((fname, result))
         for item_name, sf_map in item_sigfigs.items():
             if len(sf_map) <= 1:
                 continue
             most = max(sf_map.items(), key=lambda x: len(x[1]))
-            for sf, fnames in sf_map.items():
-                if sf != most[0] and len(fnames) < len(most[1]):
+            for sf, entries in sf_map.items():
+                if sf != most[0] and len(entries) < len(most[1]):
+                    details = ', '.join(f"{fn}(值={val})" for fn, val in entries[:3])
+                    suffix = '...' if len(entries) > 3 else ''
                     issues_data.append(
-                        f"同类型({wt})报告「{item_name}」有效位数不一致："
-                        f"{len(fnames)}个报告为{sf}位有效数字，"
-                        f"多数({len(most[1])})为{most[0]}位有效数字，"
-                        f"涉及：{', '.join(fnames[:3])}{'...' if len(fnames) > 3 else ''}")
+                        f"同类型({wt})报告「{item_name}」数字位数不一致："
+                        f"{len(entries)}个报告为{sf}位数字，"
+                        f"多数({len(most[1])})为{most[0]}位数字，"
+                        f"涉及：{details}{suffix}")
 
     # ──────────── 四、格式/模板问题 ────────────
     for wt, group in type_groups.items():
@@ -1552,6 +1590,80 @@ def main():
             f"管网水报告中，.xls 文件共 {len(guanwang_xls)} 个（页数分布：{dict(xls_pages)}），"
             f".xlsx 文件共 {len(guanwang_xlsx)} 个（页数分布：{dict(xlsx_pages)}），请确认是否使用不同模板")
 
+    # ──────────── 页码检查 ────────────
+    for fname, info in all_info.items():
+        filepath = os.path.join(report_dir, fname)
+        total_sheets = info.get('sheet_count', 0)
+        if total_sheets == 0:
+            continue
+        try:
+            if fname.endswith('.xlsx'):
+                wb = openpyxl.load_workbook(filepath, data_only=True)
+                sheet_names = wb.sheetnames
+                for si, sn in enumerate(sheet_names):
+                    ws = wb[sn]
+                    page_found = False
+                    for r in range(1, min(3, ws.max_row + 1)):
+                        for c in range(1, min(ws.max_column + 1, 10)):
+                            v = ws.cell(r, c).value
+                            if v is None:
+                                continue
+                            s = str(v)
+                            m = re.search(r'第\s*(\d+)\s*页\s*共\s*(\d+)\s*页', s)
+                            if m:
+                                page_found = True
+                                page_num = int(m.group(1))
+                                page_total = int(m.group(2))
+                                expected_page = si + 1
+                                if page_num != expected_page:
+                                    issues_format.append(
+                                        f"文件 \"{fname}\" 第{expected_page}个工作表页码标注为"
+                                        f"\"第 {page_num} 页\"，应为\"第 {expected_page} 页\"")
+                                if page_total != total_sheets:
+                                    issues_format.append(
+                                        f"文件 \"{fname}\" 第{expected_page}个工作表标注"
+                                        f"\"共 {page_total} 页\"，实际共 {total_sheets} 页")
+                                break
+                        if page_found:
+                            break
+                    if not page_found:
+                        issues_format.append(
+                            f"文件 \"{fname}\" 第{si+1}个工作表未找到页码标注")
+                wb.close()
+            else:
+                wb = xlrd.open_workbook(filepath)
+                for si in range(wb.nsheets):
+                    ws = wb.sheet_by_index(si)
+                    page_found = False
+                    for r in range(min(2, ws.nrows)):
+                        for c in range(min(ws.ncols, 10)):
+                            v = ws.cell_value(r, c)
+                            if v in ('', None):
+                                continue
+                            s = str(v)
+                            m = re.search(r'第\s*(\d+)\s*页\s*共\s*(\d+)\s*页', s)
+                            if m:
+                                page_found = True
+                                page_num = int(m.group(1))
+                                page_total = int(m.group(2))
+                                expected_page = si + 1
+                                if page_num != expected_page:
+                                    issues_format.append(
+                                        f"文件 \"{fname}\" 第{expected_page}个工作表页码标注为"
+                                        f"\"第 {page_num} 页\"，应为\"第 {expected_page} 页\"")
+                                if page_total != total_sheets:
+                                    issues_format.append(
+                                        f"文件 \"{fname}\" 第{expected_page}个工作表标注"
+                                        f"\"共 {page_total} 页\"，实际共 {total_sheets} 页")
+                                break
+                        if page_found:
+                            break
+                    if not page_found:
+                        issues_format.append(
+                            f"文件 \"{fname}\" 第{si+1}个工作表未找到页码标注")
+        except Exception:
+            pass
+
     # Check sampler consistency within type groups
     for wt, group in type_groups.items():
         samplers = defaultdict(list)
@@ -1573,17 +1685,19 @@ def main():
 
         # Check receipt date vs sampling date
         rd = info.get('receipt_date', '')
-        if sd and rd and sd != rd:
-            # Receipt should be >= sampling
+        if sd and rd:
+            # Receipt should be >= sampling, and at most 1 day apart
             try:
                 sd_parsed = datetime.strptime(sd, '%Y.%m.%d')
                 rd_parsed = datetime.strptime(rd, '%Y.%m.%d')
-                if rd_parsed < sd_parsed:
+                diff = (rd_parsed - sd_parsed).days
+                if diff < 0:
                     issues_date.append(
                         f"文件 \"{fname}\" 收样日期 ({rd}) 早于采样日期 ({sd})")
-                elif (rd_parsed - sd_parsed).days > 7:
+                elif diff > 1:
                     issues_date.append(
-                        f"文件 \"{fname}\" 收样日期 ({rd}) 与采样日期 ({sd}) 间隔超过 7 天")
+                        f"文件 \"{fname}\" 收样日期 ({rd}) 与采样日期 ({sd}) 间隔 {diff} 天，"
+                        f"原则上应为同一天，最多不超过1天")
             except ValueError:
                 pass
 
@@ -1863,6 +1977,29 @@ def main():
         lines.append(f"  {title}：{len(items)} 项{extra}")
     lines.append("")
 
+    # Build filename -> [样品XXX / 报告YYYY] tag mapping
+    fname_to_tag = {}
+    for fn, inf in all_info.items():
+        sid = inf.get('sample_id', '')
+        rn = inf.get('report_number', '')
+        parts = []
+        if sid:
+            parts.append(f"样品{sid}")
+        if rn:
+            parts.append(f"报告{rn}")
+        if parts:
+            fname_to_tag[fn] = '[' + ' / '.join(parts) + '] '
+
+    def _prepend_tag(issue_text):
+        """Try to find a filename in the issue and prepend sample/report tag."""
+        m = re.search(r'"([^"]+\.xlsx?)"', issue_text)
+        if m:
+            fn = m.group(1)
+            tag = fname_to_tag.get(fn, '')
+            if tag:
+                return tag + issue_text
+        return issue_text
+
     global_counter = 0
 
     def write_section(title, issues):
@@ -1874,7 +2011,8 @@ def main():
             lines.append("  （无）")
         for issue in issues:
             global_counter += 1
-            lines.append(f"  {global_counter}. {issue}")
+            tagged = _prepend_tag(issue)
+            lines.append(f"  {global_counter}. {tagged}")
         lines.append("")
 
     for title, items in all_sections:

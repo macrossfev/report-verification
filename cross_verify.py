@@ -33,6 +33,9 @@ SAMPLE_MAP = {
     'W260204C18': (180, '正阳水厂原水'),
 }
 
+# 报告编号 → 样品编号 反向映射
+RNUM_TO_SID = {rnum: sid for sid, (rnum, desc) in SAMPLE_MAP.items()}
+
 # 被检单位映射(从Sheet1)
 COMPANY_MAP = {
     'W260204C01': '重庆水务环境控股集团渝东南自来水有限公司秀山分公司',
@@ -393,7 +396,7 @@ def check_original_records(orig_data, sample_map, plant_groups_orig=None):
         plant_groups_orig: optional dict of plant_name -> {water_type: sample_id}
             如果为None，则自动从sample_map推断
     Returns:
-        list of (severity, report_num, description) issues
+        list of (severity, report_num, sample_ids, description) issues
     """
     issues = []
 
@@ -425,7 +428,7 @@ def check_original_records(orig_data, sample_map, plant_groups_orig=None):
                 cc_cl = float(cc_data.get('游离氯', '0'))
                 gw_cl = float(gw_data.get('游离氯', '0'))
                 if gw_cl > cc_cl * 1.1 and gw_cl > 0 and cc_cl > 0:
-                    issues.append(('注意-原始记录', 0,
+                    issues.append(('注意-原始记录', 0, f"{gw_sid},{cc_sid}",
                         f"[原始记录] {plant}管网水游离氯({gw_cl})高于出厂水({cc_cl})，需确认"))
             except (ValueError, TypeError):
                 pass
@@ -441,7 +444,7 @@ def check_original_records(orig_data, sample_map, plant_groups_orig=None):
                     cc_f = float(str(cc_v).replace('<', ''))
                     yw_f = float(str(yw_v).replace('<', ''))
                     if cc_f > yw_f * 1.2:
-                        issues.append(('注意-原始记录', 0,
+                        issues.append(('注意-原始记录', 0, f"{cc_sid},{yw_sid}",
                             f"[原始记录] {plant}出厂水高锰酸盐指数({cc_f})高于原水({yw_f})，异常"))
             except (ValueError, TypeError):
                 pass
@@ -457,7 +460,7 @@ def check_original_records(orig_data, sample_map, plant_groups_orig=None):
             try:
                 ph = float(str(ph_val).replace('<', ''))
                 if ph < 5 or ph > 10:
-                    issues.append(('严重-原始记录', 0,
+                    issues.append(('严重-原始记录', 0, sid,
                         f"[原始记录] {label} pH值={ph}异常（通常范围5-10）"))
             except (ValueError, TypeError):
                 pass
@@ -470,7 +473,7 @@ def check_original_records(orig_data, sample_map, plant_groups_orig=None):
             try:
                 v = float(str(val).replace('<', ''))
                 if v < 0:
-                    issues.append(('严重-原始记录', 0,
+                    issues.append(('严重-原始记录', 0, sid,
                         f"[原始记录] 质控样品{sid}项目「{item_name}」值为负数({val})"))
             except (ValueError, TypeError):
                 pass
@@ -501,7 +504,7 @@ def check_original_records(orig_data, sample_map, plant_groups_orig=None):
                 vlist = list(vals.values())
                 if min(vlist) > 0 and max(vlist) / min(vlist) > 2:
                     detail = ', '.join(f"{s}={v}" for s, v in vals.items())
-                    issues.append(('注意-原始记录', 0,
+                    issues.append(('注意-原始记录', 0, ','.join(vals.keys()),
                         f"[原始记录] 同水源「{source_desc}」各样品{param}差异较大: {detail}"))
 
     return issues
@@ -784,8 +787,13 @@ def main():
     issues.sort(key=lambda x: (sev_order.get(x[0], 9), x[1]))
 
     by_severity = defaultdict(list)
-    for sev, rnum, desc in issues:
-        by_severity[sev].append((rnum, desc))
+    for issue in issues:
+        if len(issue) == 4:
+            sev, rnum, sample_ids, desc = issue
+        else:
+            sev, rnum, desc = issue
+            sample_ids = ''
+        by_severity[sev].append((rnum, sample_ids, desc))
 
     total = len(issues)
     print(f"共发现 {total} 项待确认问题:")
@@ -802,9 +810,17 @@ def main():
         print(f"\n{'─' * 80}")
         print(f"  [{sev}] 共 {len(items)} 项")
         print(f"{'─' * 80}")
-        for rnum, desc in items:
+        for rnum, sample_ids, desc in items:
             counter += 1
-            rpt_tag = f"报告{rnum:04d}" if rnum > 0 else "全局"
+            if sample_ids:
+                rpt_tag = f"样品{sample_ids}"
+                if rnum > 0:
+                    rpt_tag += f" / 报告{rnum:04d}"
+            elif rnum > 0:
+                sid = RNUM_TO_SID.get(rnum, '')
+                rpt_tag = f"样品{sid} / 报告{rnum:04d}" if sid else f"报告{rnum:04d}"
+            else:
+                rpt_tag = "全局"
             print(f"  {counter:2d}. [{rpt_tag}] {desc}")
 
     print(f"\n{'═' * 80}")
