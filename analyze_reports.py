@@ -998,8 +998,16 @@ def cross_verify_reports(registry, test_data, all_info):
                 continue
             matched = find_matching_report_item(report_items, orig_name)
             if matched is None:
-                issues_verify.append(
-                    f"报告 \"{fname}\" 缺少原始记录项目「{orig_name}」(原始值={orig_val})")
+                # 区分：原水报告中缺少出厂水/管网水特有项目 vs 真正的项目遗漏
+                raw_only_skip = ('色度', '浑浊度', '肉眼可见物', '臭和味', '菌落总数',
+                                 '总大肠菌群', '大肠埃希氏菌')
+                if is_raw and base_orig in raw_only_skip:
+                    issues_verify.append(
+                        f"报告 \"{fname}\" 未包含原始记录项目「{orig_name}」(原始值={orig_val})，"
+                        f"该项目通常不在原水报告中出具，请确认是否正常")
+                else:
+                    issues_verify.append(
+                        f"报告 \"{fname}\" 缺少原始记录项目「{orig_name}」(原始值={orig_val})")
                 continue
             if not vals_match(orig_val, matched['result']):
                 o = re.sub(r'[、，,]+$', '', str(orig_val).strip()).replace('＜', '<')
@@ -1160,16 +1168,387 @@ def cross_verify_reports(registry, test_data, all_info):
 
 # ─────────────────── MAIN ANALYSIS ───────────────────
 
+# ──────────────────────── 公示表交叉比对 ────────────────────────
+
+def _pub_normalize_item(name):
+    """统一检测项目名称，用于公示表与报告匹配"""
+    if not name:
+        return ''
+    name = str(name).strip()
+    name = re.sub(r'[（(][^）)]*[）)]', '', name)
+    name = re.sub(r'[（(][^）)]*$', '', name)
+    name = re.sub(r'^[^（(]*[）)]', '', name)
+    name = name.replace('(', '').replace(')', '').replace('（', '').replace('）', '')
+    name = name.replace('挥发酚类', '挥发酚')
+    name = name.replace('阴离子合成洗涤剂', '阴离子表面活性剂')
+    name = name.replace('氨氮', '氨')
+    name = name.replace('总alpha放射性', '总α放射性')
+    name = name.replace('总beta放射性', '总β放射性')
+    return name.strip()
+
+
+def _pub_normalize_value(val):
+    """统一检测值表示"""
+    if val is None:
+        return None
+    val = str(val).strip()
+    if val in ('', '/', '-', 'None'):
+        return None
+    val = val.replace('＜', '<').replace('≤', '<=')
+    val = re.sub(r'\s+', '', val)
+    try:
+        return float(val)
+    except ValueError:
+        pass
+    m = re.match(r'^<([\d.]+)$', val)
+    if m:
+        return f'<{m.group(1)}'
+    return val
+
+
+def _pub_values_match(v1, v2):
+    """比较两个检测值是否一致"""
+    n1, n2 = _pub_normalize_value(v1), _pub_normalize_value(v2)
+    if n1 is None and n2 is None:
+        return True
+    if n1 is None or n2 is None:
+        return False
+    if isinstance(n1, float) and isinstance(n2, float):
+        if n1 == 0 and n2 == 0:
+            return True
+        if n1 == 0 or n2 == 0:
+            return abs(n1 - n2) < 1e-9
+        return abs(n1 - n2) / max(abs(n1), abs(n2)) < 0.001
+    s1, s2 = str(n1).strip(), str(n2).strip()
+    m1 = re.match(r'^<([\d.]+)$', s1)
+    m2 = re.match(r'^<([\d.]+)$', s2)
+    if m1 and m2:
+        return abs(float(m1.group(1)) - float(m2.group(1))) < 1e-9
+    if isinstance(n1, float) and m2:
+        return False
+    if isinstance(n2, float) and m1:
+        return False
+    equiv = {'无': '无', '无异臭、异味': '无异臭、异味',
+             '无异臭异味': '无异臭、异味', '未检出': '未检出', '0': '未检出'}
+    return equiv.get(s1, s1) == equiv.get(s2, s2)
+
+
+def _pub_classify_water(wtype):
+    if not wtype:
+        return ''
+    if '出' in wtype:
+        return '出厂水'
+    if '原' in wtype:
+        return '原水'
+    if '管' in wtype:
+        return '管网水'
+    return wtype
+
+
+def _pub_read_sheets(pub_dir):
+    """读取公示表目录下所有数据汇总表"""
+    data, info = {}, {}
+    for fname in sorted(os.listdir(pub_dir)):
+        if not fname.endswith('.xlsx'):
+            continue
+        company = fname.replace('数据汇总表.xlsx', '')
+        wb = openpyxl.load_workbook(os.path.join(pub_dir, fname), data_only=True)
+        for sn in wb.sheetnames:
+            ws = wb[sn]
+            if '出' in sn:
+                wt = '出厂水'
+            elif '原' in sn:
+                wt = '原水'
+            elif '管' in sn:
+                wt = '管网水'
+            else:
+                wt = sn
+            sids = []
+            for c in range(2, ws.max_column + 1):
+                v = ws.cell(row=2, column=c).value
+                sids.append(str(v).strip() if v else None)
+            locs = []
+            for c in range(2, ws.max_column + 1):
+                v = ws.cell(row=3, column=c).value
+                locs.append(str(v).strip() if v else '')
+            for r in range(4, ws.max_row + 1):
+                raw = ws.cell(row=r, column=1).value
+                if not raw:
+                    continue
+                raw = str(raw).strip()
+                if '以下无检测数据' in raw:
+                    break
+                ik = _pub_normalize_item(raw)
+                if not ik:
+                    continue
+                for ci, sid in enumerate(sids):
+                    if not sid:
+                        continue
+                    val = ws.cell(row=r, column=ci + 2).value
+                    if val is not None:
+                        val = str(val).strip()
+                    key = (sid, wt)
+                    data.setdefault(key, {})[ik] = val
+                    info[key] = (company, wt, locs[ci] if ci < len(locs) else '')
+        wb.close()
+    return data, info
+
+
+def _pub_read_report_file(fpath, fname):
+    """读取单个电子报告文件，返回 (sample_id, water_type, location, {item: value})"""
+    if fname.endswith('.xlsx'):
+        wb = openpyxl.load_workbook(fpath, data_only=True)
+        sheets = wb.sheetnames
+        get_cell = lambda si, r, c: wb[sheets[si]].cell(row=r+1, column=c+1).value
+        nrows = lambda si: wb[sheets[si]].max_row
+        ncols = lambda si: wb[sheets[si]].max_column
+        close = wb.close
+    else:
+        wb = xlrd.open_workbook(fpath)
+        sheets = wb.sheet_names()
+        get_cell = lambda si, r, c: wb.sheet_by_index(si).cell_value(r, c)
+        nrows = lambda si: wb.sheet_by_index(si).nrows
+        ncols = lambda si: wb.sheet_by_index(si).ncols
+        close = lambda: None
+
+    sid, wtype, loc, items = None, None, None, {}
+    # Sheet 2: 样品信息
+    if len(sheets) >= 2:
+        for r in range(min(20, nrows(1))):
+            for c in range(min(10, ncols(1))):
+                cv = get_cell(1, r, c)
+                if not cv:
+                    continue
+                cs = str(cv).strip()
+                if '样品编号' in cs:
+                    for c2 in range(c+1, min(c+4, ncols(1))):
+                        v = get_cell(1, r, c2)
+                        if v and str(v).strip().startswith('W'):
+                            sid = str(v).strip()
+                            break
+                if '样品类型' in cs:
+                    for c2 in range(c+1, min(c+4, ncols(1))):
+                        v = get_cell(1, r, c2)
+                        if v:
+                            wtype = str(v).strip()
+                            break
+                if '采样地点' in cs:
+                    for c2 in range(c+1, min(c+4, ncols(1))):
+                        v = get_cell(1, r, c2)
+                        if v:
+                            loc = str(v).strip()
+                            break
+    # Sheet 3 & 4: 检测结果
+    for si in range(2, min(4, len(sheets))):
+        for r in range(nrows(si)):
+            seq = get_cell(si, r, 0)
+            try:
+                sn = int(float(str(seq)))
+            except (ValueError, TypeError):
+                continue
+            if sn < 1 or sn > 100:
+                continue
+            raw = get_cell(si, r, 1)
+            if not raw:
+                continue
+            ik = _pub_normalize_item(str(raw).strip())
+            if not ik:
+                continue
+            rv = get_cell(si, r, 3)
+            if rv is not None and rv != '':
+                rv = str(rv).strip()
+            else:
+                rv = None
+            items[ik] = rv
+    close()
+    return sid, wtype, loc, items
+
+
+def run_public_verify(base_dir, output_file):
+    """执行公示表 vs 电子报告交叉比对，输出结果到文件"""
+    pub_dir = os.path.join(base_dir, '公示表')
+    rpt_dir = os.path.join(base_dir, '电子报告')
+
+    if not os.path.isdir(pub_dir):
+        print(f"错误：公示表目录不存在 —— {pub_dir}")
+        sys.exit(1)
+    if not os.path.isdir(rpt_dir):
+        print(f"错误：电子报告目录不存在 —— {rpt_dir}")
+        sys.exit(1)
+
+    lines = []
+    L = lines.append
+
+    L("=" * 72)
+    L("    公示表与电子报告交叉比对 —— 问题清单")
+    L("=" * 72)
+    L(f"生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    L(f"公示表目录：{pub_dir}")
+    L(f"报告目录：  {rpt_dir}")
+    L("")
+
+    # 读取公示表
+    print("读取公示表...")
+    pub_data, pub_info = _pub_read_sheets(pub_dir)
+    print(f"  公示表样品数：{len(pub_data)}")
+
+    # 读取电子报告
+    print("读取电子报告...")
+    rpt_data, rpt_info, rpt_errors = {}, {}, []
+    for fname in sorted(os.listdir(rpt_dir)):
+        if not fname.endswith(('.xlsx', '.xls')):
+            continue
+        fpath = os.path.join(rpt_dir, fname)
+        try:
+            sid, wtype, loc, items = _pub_read_report_file(fpath, fname)
+            if not sid:
+                rpt_errors.append(f"[无法提取样品编号] {fname}")
+                continue
+            if not items:
+                rpt_errors.append(f"[无检测数据] {fname} (样品编号: {sid})")
+                continue
+            key = (sid, _pub_classify_water(wtype))
+            if key in rpt_data:
+                rpt_errors.append(f"[样品编号+类型重复] {sid}/{key[1]} 在 {fname} 中重复出现")
+            rpt_data[key] = items
+            rpt_info[key] = (fname, wtype, loc)
+        except Exception as e:
+            rpt_errors.append(f"[读取失败] {fname}: {e}")
+    print(f"  电子报告样品数：{len(rpt_data)}")
+
+    # 匹配
+    pub_keys = set(pub_data.keys())
+    rpt_keys = set(rpt_data.keys())
+    matched = pub_keys & rpt_keys
+    pub_only = pub_keys - rpt_keys
+    rpt_only = rpt_keys - pub_keys
+
+    L(f"公示表样品数：{len(pub_data)}")
+    L(f"电子报告样品数：{len(rpt_data)}")
+    L(f"匹配成功：{len(matched)}")
+    L(f"仅在公示表中：{len(pub_only)}")
+    L(f"仅在电子报告中：{len(rpt_only)}")
+    L("")
+
+    # 分类收集问题
+    issues_pub = []   # 公示表问题
+    issues_rpt = []   # 报告问题
+
+    # 读取报告错误 -> 报告问题
+    for e in rpt_errors:
+        issues_rpt.append(e)
+
+    # 未匹配 -> 分两边记录
+    if pub_only:
+        for key in sorted(pub_only):
+            info = pub_info.get(key, ('', '', ''))
+            issues_pub.append(f"[公示表有/报告无] {key[0]} / {key[1]}  ({info[0]}, {info[2]})")
+    if rpt_only:
+        for key in sorted(rpt_only):
+            info = rpt_info.get(key, ('', '', ''))
+            issues_rpt.append(f"[报告有/公示表无] {key[0]} / {key[1]}  ({info[0]}, {info[2]})")
+
+    # 逐项比对
+    total_checked = 0
+    total_mismatch = 0
+    total_pub_miss = 0
+    total_rpt_miss = 0
+
+    for mkey in sorted(matched):
+        p_items = pub_data[mkey]
+        r_items = rpt_data[mkey]
+        p_info = pub_info.get(mkey, ('', '', ''))
+        r_info = rpt_info.get(mkey, ('', '', ''))
+        sid_label = f"{mkey[0]} / {mkey[1]}"
+
+        all_item_keys = set(p_items.keys()) | set(r_items.keys())
+        sample_mismatches = []
+        for ik in sorted(all_item_keys):
+            pv = p_items.get(ik)
+            rv = r_items.get(ik)
+            if _pub_normalize_value(pv) is None and _pub_normalize_value(rv) is None:
+                continue
+            total_checked += 1
+            if _pub_normalize_value(pv) is None:
+                total_pub_miss += 1
+                sample_mismatches.append((ik, '[公示表缺失]', rv))
+            elif _pub_normalize_value(rv) is None:
+                total_rpt_miss += 1
+                sample_mismatches.append((ik, pv, '[报告缺失]'))
+            elif not _pub_values_match(pv, rv):
+                total_mismatch += 1
+                sample_mismatches.append((ik, pv, rv))
+
+        if sample_mismatches:
+            # 分类：公示表缺失 -> 公示表问题，报告缺失 -> 报告问题，数值不同 -> 两边都记
+            for ik, pv, rv in sample_mismatches:
+                detail = f"  {sid_label}  公示表({p_info[0]}/{p_info[2]})  报告({r_info[0]}/{r_info[2]})  项目: {ik}  公示表值: {pv}  报告值: {rv}"
+                if pv == '[公示表缺失]':
+                    issues_pub.append(f"[公示表缺失检测项] {detail}")
+                elif rv == '[报告缺失]':
+                    issues_rpt.append(f"[报告缺失检测项] {detail}")
+                else:
+                    issues_pub.append(f"[数值不一致] {detail}")
+                    issues_rpt.append(f"[数值不一致] {detail}")
+
+    # 输出第一部分：公示表问题
+    L("=" * 72)
+    L(f"  第一部分：公示表问题（共 {len(issues_pub)} 项）")
+    L("=" * 72)
+    if not issues_pub:
+        L("  （无）")
+    for i, issue in enumerate(issues_pub, 1):
+        L(f"  {i}. {issue}")
+    L("")
+
+    # 输出第二部分：电子报告问题
+    L("=" * 72)
+    L(f"  第二部分：电子报告问题（共 {len(issues_rpt)} 项）")
+    L("=" * 72)
+    if not issues_rpt:
+        L("  （无）")
+    for i, issue in enumerate(issues_rpt, 1):
+        L(f"  {i}. {issue}")
+    L("")
+
+    # 汇总
+    L("=" * 72)
+    L("  汇总")
+    L("=" * 72)
+    L(f"  总检查项数:     {total_checked}")
+    L(f"  数值不一致:     {total_mismatch}")
+    L(f"  公示表缺失项:   {total_pub_miss}")
+    L(f"  报告缺失项:     {total_rpt_miss}")
+    L(f"  完全一致样品:   {len(matched) - len([1 for m in sorted(matched) if any(not _pub_values_match(pub_data[m].get(k), rpt_data[m].get(k)) for k in set(pub_data[m])|set(rpt_data[m]) if not(_pub_normalize_value(pub_data[m].get(k)) is None and _pub_normalize_value(rpt_data[m].get(k)) is None))])} / {len(matched)}")
+    L("")
+    L("=" * 72)
+    L("以上问题均为程序自动检测，可能存在误报，请人工逐项核实。")
+    L("=" * 72)
+
+    output_text = '\n'.join(lines)
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write(output_text)
+
+    total_issues = len(issues_pub) + len(issues_rpt)
+    print(f"\n公示表交叉比对完成！共发现 {total_issues} 项待确认问题。")
+    print(f"  公示表问题: {len(issues_pub)} 项")
+    print(f"  报告问题:   {len(issues_rpt)} 项")
+    print(f"结果已写入：{output_file}")
+    return output_text
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="水质检测报告验证分析脚本 —— 扫描指定目录下的 .xlsx/.xls 报告文件并输出待确认问题清单。",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""示例:
-  %(prog)s                          # 扫描脚本所在目录
-  %(prog)s /path/to/reports         # 扫描指定目录
-  %(prog)s ./report/0189-0211       # 扫描相对路径目录
-  %(prog)s -r /path/to/reports      # 同上（使用 -r 参数）
-  %(prog)s -o result.txt            # 自定义输出文件名
+  %(prog)s -oridata                         # 仅检查原始记录
+  %(prog)s -report                          # 仅检查报告文件
+  %(prog)s -report -r /path/to/reports      # 检查指定目录下的报告文件
+  %(prog)s -datareport                      # 基于原始记录检查报告（交叉验证）
+  %(prog)s -datareport -r /path/to/reports  # 指定目录进行交叉验证
+  %(prog)s -public                          # 公示表与电子报告交叉比对
+  %(prog)s -public -r /path/to/Publicsheet  # 指定Publicsheet目录
 """)
     parser.add_argument('directory', nargs='?', default=None,
                         help='报告文件所在目录（默认为脚本所在目录）')
@@ -1177,9 +1556,21 @@ def parse_args():
                         help='报告文件所在目录（与位置参数等效，位置参数优先）')
     parser.add_argument('-o', '--output', default=None,
                         help='输出文件路径（默认为扫描目录下的"待确认问题清单.txt"）')
-    parser.add_argument('-ori', action='store_true',
+    parser.add_argument('-oridata', action='store_true',
                         help='仅检查原始记录，不检查报告文件')
-    return parser.parse_args()
+    parser.add_argument('-report', action='store_true',
+                        help='仅检查报告文件，不做原始记录交叉验证')
+    parser.add_argument('-datareport', action='store_true',
+                        help='基于原始记录检查报告（完整交叉验证）')
+    parser.add_argument('-public', action='store_true',
+                        help='公示表与电子报告交叉比对，检查数据一致性')
+
+    args = parser.parse_args()
+    # 如果没有指定任何运行模式，显示帮助并退出
+    if not any([args.oridata, args.report, args.datareport, args.public]):
+        parser.print_help()
+        sys.exit(0)
+    return args
 
 
 def main():
@@ -1195,6 +1586,20 @@ def main():
 
     output_file = args.output or os.path.join(report_dir, "待确认问题清单.txt")
     output_file = os.path.abspath(output_file)
+
+    # ── -public 模式：公示表与电子报告交叉比对 ──
+    if args.public:
+        base_dir = report_dir
+        if os.path.isdir(os.path.join(base_dir, '公示表')) and os.path.isdir(os.path.join(base_dir, '电子报告')):
+            pass
+        elif os.path.isdir(os.path.join(base_dir, 'Publicsheet')):
+            base_dir = os.path.join(base_dir, 'Publicsheet')
+        else:
+            print(f"错误：在 {base_dir} 下未找到 公示表/ 和 电子报告/ 目录。")
+            print("请使用 -r 指定包含 公示表/ 和 电子报告/ 的目录，或包含 Publicsheet/ 的项目根目录。")
+            sys.exit(1)
+        pub_output = output_file if args.output else os.path.join(base_dir, "公示表与电子报告交叉比对结果.txt")
+        return run_public_verify(base_dir, pub_output)
 
     # ══════════════════════════════════════════════════════
     # Phase 1: Find and read original record
@@ -1234,8 +1639,8 @@ def main():
         print("未找到原始记录文件（如 260205-1-25.xlsx），跳过原始记录检查与交叉验证。")
     print()
 
-    # ── -ori 模式：仅输出原始记录检查结果 ──
-    if args.ori:
+    # ── -oridata 模式：仅输出原始记录检查结果 ──
+    if args.oridata:
         ori_output = output_file if args.output else os.path.join(report_dir, "原始记录检查结果.txt")
         lines = []
         lines.append("=" * 72)
@@ -1431,6 +1836,48 @@ def main():
     for fname, info in all_info.items():
         if 'report_number' not in info and 'read_error' not in info:
             issues_numbering.append(f"文件 \"{fname}\" 未能提取到报告编号")
+
+    # ──────────── 样品编号检查 ────────────
+    # A. 样品编号日期与收样日期一致性检查
+    sid_pattern_date = re.compile(r'^[WKM](\d{6})[CZ]\d+$')
+    for fname, info in all_info.items():
+        sid = info.get('sample_id', '').strip()
+        receipt_date = info.get('receipt_date', '').strip()
+        if not sid or not receipt_date:
+            continue
+        m = sid_pattern_date.match(sid)
+        if not m:
+            continue
+        sid_date_str = m.group(1)  # e.g. '260105'
+        # 将收样日期统一为 YYMMDD 格式进行比较
+        # 支持格式: 2026.01.05, 2026-01-05, 2026/01/05, 2026年01月05日
+        rd = receipt_date.replace('-', '.').replace('/', '.')
+        rd = re.sub(r'[年月]', '.', rd).replace('日', '')
+        rd_match = re.search(r'(\d{4})\.(\d{1,2})\.(\d{1,2})', rd)
+        if not rd_match:
+            continue
+        rd_yy = rd_match.group(1)[2:]  # 后两位年份
+        rd_mm = rd_match.group(2).zfill(2)
+        rd_dd = rd_match.group(3).zfill(2)
+        receipt_yymmdd = rd_yy + rd_mm + rd_dd
+        if sid_date_str != receipt_yymmdd:
+            sid_date_fmt = f"20{sid_date_str[:2]}.{sid_date_str[2:4]}.{sid_date_str[4:6]}"
+            issues_numbering.append(
+                f"文件 \"{fname}\" 样品编号「{sid}」中的日期({sid_date_fmt})与收样日期({receipt_date})不一致，"
+                f"样品编号可能有误")
+
+    # B. 样品编号重复检查（不同报告使用了相同样品编号）
+    sid_to_fnames = defaultdict(list)
+    for fname, info in all_info.items():
+        sid = info.get('sample_id', '').strip()
+        if sid and re.match(r'[WKM]\d{6}[CZ]\d+', sid):
+            sample_type = info.get('sample_type', '')
+            sid_to_fnames[sid].append((fname, sample_type))
+    for sid, entries in sorted(sid_to_fnames.items()):
+        if len(entries) > 1:
+            detail = ', '.join(f"{fn}({st})" for fn, st in entries)
+            issues_numbering.append(
+                f"样品编号「{sid}」在 {len(entries)} 个报告中重复使用：{detail}")
 
     # ──────────── 三、数据问题 ────────────
     for fname, info in all_info.items():

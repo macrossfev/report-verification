@@ -25,17 +25,35 @@ source venv/bin/activate
 # 安装依赖
 pip install -q -r requirements.txt
 
-echo ""
-echo "用法: ./start.sh [目录路径] [选项]"
-echo "  ./start.sh                        扫描脚本所在目录"
-echo "  ./start.sh /path/to/reports        扫描指定目录"
-echo "  ./start.sh -r /path/to/reports     同上"
-echo "  ./start.sh -o output.txt           自定义输出文件"
-echo "  ./start.sh -h                      查看完整帮助"
+# 如果没有参数，显示帮助信息
+if [ $# -eq 0 ]; then
+    echo ""
+    echo "用法: ./start.sh <模式> [其他选项]"
+    echo ""
+    echo "运行模式（必选其一）："
+    echo "  -oridata       仅检查原始记录"
+    echo "  -report        仅检查报告文件"
+    echo "  -datareport    基于原始记录检查报告（交叉验证）"
+    echo "  -public        基于报告核对公示表"
+    echo ""
+    echo "其他选项："
+    echo "  -r <目录>      指定扫描目录"
+    echo "  -o <文件>      自定义输出文件"
+    echo "  -h             查看完整帮助"
+    echo ""
+    echo "示例："
+    echo "  ./start.sh -oridata"
+    echo "  ./start.sh -report -r /path/to/reports"
+    echo "  ./start.sh -datareport"
+    echo "  ./start.sh -public -r /path/to/Publicsheet"
+    echo ""
+    exit 0
+fi
+
 echo ""
 echo "开始分析报告文件..."
 echo "================================================"
 echo ""
 
-# 运行分析脚本
+# 运行分析脚本，将所有参数传递给 Python
 python3 analyze_reports.py "$@"
