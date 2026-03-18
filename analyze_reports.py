@@ -539,7 +539,7 @@ def count_digits(value_str):
 def read_original_record(filepath):
     """Read original record: sample registry (Sheet1) + all test data."""
     wb = openpyxl.load_workbook(filepath, data_only=True)
-    sid_pattern = r'[WKM]\d{6}C\d+'
+    sid_pattern = r'[WKM]\d{6}[CZ]\d+'
 
     # ── Sheet1: Sample Registry ──
     registry = []
